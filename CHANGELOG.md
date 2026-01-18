@@ -16,6 +16,7 @@ Docs: https://docs.clawd.bot
 - macOS: load menu session previews asynchronously so items populate while the menu is open.
 - macOS: use label colors for session preview text so previews render in menu subviews.
 - macOS: suppress usage error text in the menubar cost view.
+- macOS: fix onboarding action link labels for channels vs skills. (#1197) — thanks @chriseidhof.
 - Telegram: honor pairing allowlists for native slash commands.
 - CLI: keep banners on routed commands, restore config guarding outside fast-path routing, and tighten fast-path flag parsing while skipping console capture for extra speed. (#1195) — thanks @gumadeiras.
 
