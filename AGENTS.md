@@ -3,6 +3,19 @@
 - Repo: https://github.com/openclaw/openclaw
 - GitHub issues/comments/PR comments: use literal multiline strings or `-F - <<'EOF'` (or $'...') for real newlines; never embed "\\n".
 
+## Local Merge Keepers (MUST read before sync/merge)
+
+This repo has local behavior patches that are intentionally not upstream defaults.
+Before any rebase/merge from upstream, read:
+
+- `LOCAL_CHANGELOG.md` (local-only changelog + keeper checklist)
+
+Minimum merge protocol:
+
+1. `git log origin/main..HEAD --oneline` to see local-only commits.
+2. Read keeper sections in `LOCAL_CHANGELOG.md` and verify corresponding files still preserve behavior.
+3. After merge, run the keeper regression checks listed in `LOCAL_CHANGELOG.md`.
+
 ## Project Structure & Module Organization
 
 - Source code: `src/` (CLI wiring in `src/cli`, commands in `src/commands`, web provider in `src/provider-web.ts`, infra in `src/infra`, media pipeline in `src/media`).
