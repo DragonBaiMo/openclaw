@@ -41,10 +41,12 @@ export type OverviewProps = {
   overviewLogLines: string[];
   streamMode: boolean;
   showGatewayToken: boolean;
+  showGatewayPassword: boolean;
   onSettingsChange: (next: UiSettings) => void;
   onPasswordChange: (next: string) => void;
   onSessionKeyChange: (next: string) => void;
   onToggleGatewayTokenVisibility: () => void;
+  onToggleGatewayPasswordVisibility: () => void;
   onConnect: () => void;
   onRefresh: () => void;
   onNavigate: (tab: string) => void;
@@ -233,15 +235,30 @@ export function renderOverview(props: OverviewProps) {
                 </label>
                 <label class="field">
                   <span>${t("overview.access.password")}</span>
-                  <input
-                    type="password"
-                    .value=${props.password}
-                    @input=${(e: Event) => {
-                      const v = (e.target as HTMLInputElement).value;
-                      props.onPasswordChange(v);
-                    }}
-                    placeholder="system or shared password"
-                  />
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <input
+                      type=${props.showGatewayPassword ? "text" : "password"}
+                      autocomplete="off"
+                      style="flex: 1;"
+                      .value=${props.password}
+                      @input=${(e: Event) => {
+                        const v = (e.target as HTMLInputElement).value;
+                        props.onPasswordChange(v);
+                      }}
+                      placeholder="system or shared password"
+                    />
+                    <button
+                      type="button"
+                      class="btn btn--icon ${props.showGatewayPassword ? "active" : ""}"
+                      style="width: 36px; height: 36px;"
+                      title=${props.showGatewayPassword ? "Hide password" : "Show password"}
+                      aria-label="Toggle password visibility"
+                      aria-pressed=${props.showGatewayPassword}
+                      @click=${props.onToggleGatewayPasswordVisibility}
+                    >
+                      ${props.showGatewayPassword ? icons.eye : icons.eyeOff}
+                    </button>
+                  </div>
                 </label>
               `
           }

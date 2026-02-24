@@ -40,6 +40,8 @@ import type { SessionLogEntry } from "./views/usage.ts";
 export type AppViewState = {
   settings: UiSettings;
   password: string;
+  loginShowGatewayToken: boolean;
+  loginShowGatewayPassword: boolean;
   tab: Tab;
   onboarding: boolean;
   basePath: string;
@@ -259,6 +261,7 @@ export type AppViewState = {
   paletteActiveIndex: number;
   streamMode: boolean;
   overviewShowGatewayToken: boolean;
+  overviewShowGatewayPassword: boolean;
   overviewLogLines: string[];
   overviewLogCursor: number;
   client: GatewayBrowserClient | null;

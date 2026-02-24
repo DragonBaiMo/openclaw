@@ -399,6 +399,7 @@ export function renderApp(state: AppViewState) {
                 overviewLogLines: state.overviewLogLines,
                 streamMode: state.streamMode,
                 showGatewayToken: state.overviewShowGatewayToken,
+                showGatewayPassword: state.overviewShowGatewayPassword,
                 onSettingsChange: (next) => state.applySettings(next),
                 onPasswordChange: (next) => (state.password = next),
                 onSessionKeyChange: (next) => {
@@ -414,6 +415,9 @@ export function renderApp(state: AppViewState) {
                 },
                 onToggleGatewayTokenVisibility: () => {
                   state.overviewShowGatewayToken = !state.overviewShowGatewayToken;
+                },
+                onToggleGatewayPasswordVisibility: () => {
+                  state.overviewShowGatewayPassword = !state.overviewShowGatewayPassword;
                 },
                 onConnect: () => state.connect(),
                 onRefresh: () => state.loadOverview(),

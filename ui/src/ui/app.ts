@@ -139,6 +139,8 @@ export class OpenClawApp extends LitElement {
     }
   }
   @state() password = "";
+  @state() loginShowGatewayToken = false;
+  @state() loginShowGatewayPassword = false;
   @state() tab: Tab = "chat";
   @state() onboarding = resolveOnboardingMode();
   @state() connected = false;
@@ -370,6 +372,7 @@ export class OpenClawApp extends LitElement {
     }
   })();
   @state() overviewShowGatewayToken = false;
+  @state() overviewShowGatewayPassword = false;
   @state() overviewLogLines: string[] = [];
   @state() overviewLogCursor = 0;
 

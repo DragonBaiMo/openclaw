@@ -59,6 +59,22 @@
   gap: 12px;
 }
 
+.login-gate__secret-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.login-gate__secret-row input {
+  flex: 1;
+}
+
+.login-gate__secret-row .btn--icon {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+}
+
 .login-gate__connect {
   margin-top: 4px;
   width: 100%;
