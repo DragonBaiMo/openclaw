@@ -1,6 +1,7 @@
 import { normalizeToolName } from "../agents/tool-policy.js";
 import type { AnyAgentTool } from "../agents/tools/common.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { getAgentBoundChannels } from "../routing/bindings.js";
 import { applyTestPluginDefaults, normalizePluginsConfig } from "./config-state.js";
 import { loadOpenClawPlugins } from "./loader.js";
 import { createPluginLoaderLogger } from "./logger.js";
@@ -66,9 +67,15 @@ export function resolvePluginTools(params: {
   const existingNormalized = new Set(Array.from(existing, (tool) => normalizeToolName(tool)));
   const allowlist = normalizeAllowlist(params.toolAllowlist);
   const blockedPlugins = new Set<string>();
+  const channelRegistrations = Array.isArray(registry.channels) ? registry.channels : [];
+  const channelPluginIds = new Set(channelRegistrations.map((entry) => entry.pluginId));
+  const boundChannels = getAgentBoundChannels(effectiveConfig, params.context.agentId);
 
   for (const entry of registry.tools) {
     if (blockedPlugins.has(entry.pluginId)) {
+      continue;
+    }
+    if (channelPluginIds.has(entry.pluginId) && !boundChannels.has(entry.pluginId)) {
       continue;
     }
     const pluginIdKey = normalizeToolName(entry.pluginId);
