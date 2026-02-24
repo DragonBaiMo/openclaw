@@ -27,6 +27,7 @@ Local change rule (required):
 - Only implement after user confirmation. Avoid unilateral behavior changes.
 - If you make or discover a local-only behavior change / merge keeper, you must update `LOCAL_CHANGELOG.md` in the same work cycle.
 - Keep extending `LOCAL_CHANGELOG.md` using its existing structure/format (MUST KEEP / risks / key files / regression checks). Do not create scattered local notes instead.
+- For code project work in this repo, always check the latest record under the workspace project records (e.g. `main-workspace/project-records/<project>/`) before changing code, and write back a record after the task.
 
 ## Project Structure & Module Organization
 
