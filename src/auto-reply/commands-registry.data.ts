@@ -462,6 +462,14 @@ function buildChatCommands(): ChatCommandDefinition[] {
       category: "session",
     }),
     defineChatCommand({
+      key: "insert",
+      nativeName: "insert",
+      description: "Run one queued follow-up immediately after the current turn.",
+      textAlias: "/insert",
+      acceptsArgs: true,
+      category: "session",
+    }),
+    defineChatCommand({
       key: "restart",
       nativeName: "restart",
       description: "Restart OpenClaw.",
