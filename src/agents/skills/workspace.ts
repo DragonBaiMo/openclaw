@@ -224,6 +224,7 @@ function loadSkillEntries(
     config?: OpenClawConfig;
     managedSkillsDir?: string;
     bundledSkillsDir?: string;
+    agentId?: string;
   },
 ): SkillEntry[] {
   const limits = resolveSkillsLimits(opts?.config);
@@ -331,6 +332,7 @@ function loadSkillEntries(
   const pluginSkillDirs = resolvePluginSkillDirs({
     workspaceDir,
     config: opts?.config,
+    agentId: opts?.agentId,
   });
   const mergedExtraDirs = [...extraDirs, ...pluginSkillDirs];
 
@@ -449,6 +451,7 @@ export function buildWorkspaceSkillSnapshot(
     config?: OpenClawConfig;
     managedSkillsDir?: string;
     bundledSkillsDir?: string;
+    agentId?: string;
     entries?: SkillEntry[];
     /** If provided, only include skills with these names */
     skillFilter?: string[];
@@ -504,6 +507,7 @@ export function buildWorkspaceSkillsPrompt(
     config?: OpenClawConfig;
     managedSkillsDir?: string;
     bundledSkillsDir?: string;
+    agentId?: string;
     entries?: SkillEntry[];
     /** If provided, only include skills with these names */
     skillFilter?: string[];
@@ -560,6 +564,7 @@ export function loadWorkspaceSkillEntries(
     config?: OpenClawConfig;
     managedSkillsDir?: string;
     bundledSkillsDir?: string;
+    agentId?: string;
   },
 ): SkillEntry[] {
   return loadSkillEntries(workspaceDir, opts);

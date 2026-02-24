@@ -70,7 +70,11 @@ function resolveWatchPaths(workspaceDir: string, config?: OpenClawConfig): strin
     .filter(Boolean)
     .map((dir) => resolveUserPath(dir));
   paths.push(...extraDirs);
-  const pluginSkillDirs = resolvePluginSkillDirs({ workspaceDir, config });
+  const pluginSkillDirs = resolvePluginSkillDirs({
+    workspaceDir,
+    config,
+    includeAllChannels: true,
+  });
   paths.push(...pluginSkillDirs);
   return paths;
 }

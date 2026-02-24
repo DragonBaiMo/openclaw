@@ -8,12 +8,15 @@ import {
   resolveMemorySlotDecision,
 } from "../../plugins/config-state.js";
 import { loadPluginManifestRegistry } from "../../plugins/manifest-registry.js";
+import { getAgentBoundChannels } from "../../routing/bindings.js";
 
 const log = createSubsystemLogger("skills");
 
 export function resolvePluginSkillDirs(params: {
   workspaceDir: string;
   config?: OpenClawConfig;
+  agentId?: string;
+  includeAllChannels?: boolean;
 }): string[] {
   const workspaceDir = params.workspaceDir.trim();
   if (!workspaceDir) {
@@ -31,6 +34,12 @@ export function resolvePluginSkillDirs(params: {
   let selectedMemoryPluginId: string | null = null;
   const seen = new Set<string>();
   const resolved: string[] = [];
+  const skipChannelFilter = params.includeAllChannels === true;
+  const boundChannels = skipChannelFilter
+    ? null
+    : params.config
+      ? getAgentBoundChannels(params.config, params.agentId)
+      : new Set<string>();
 
   for (const record of registry.plugins) {
     if (!record.skills || record.skills.length === 0) {
@@ -38,6 +47,13 @@ export function resolvePluginSkillDirs(params: {
     }
     const enableState = resolveEnableState(record.id, record.origin, normalizedPlugins);
     if (!enableState.enabled) {
+      continue;
+    }
+    if (
+      !skipChannelFilter &&
+      record.channels.length > 0 &&
+      (!boundChannels || !record.channels.some((channel) => boundChannels.has(channel)))
+    ) {
       continue;
     }
     const memoryDecision = resolveMemorySlotDecision({
