@@ -289,6 +289,8 @@ export type AgentCompactionMode = "default" | "safeguard";
 export type AgentCompactionConfig = {
   /** Compaction summarization mode. */
   mode?: AgentCompactionMode;
+  timeoutSeconds?: number;
+  model?: string;
   /** Pi reserve tokens target before floor enforcement. */
   reserveTokens?: number;
   /** Pi keepRecentTokens budget used for cut-point selection. */

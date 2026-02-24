@@ -104,4 +104,36 @@ describe("config compaction settings", () => {
       expect(cfg.agents?.defaults?.compaction?.reserveTokensFloor).toBe(9000);
     });
   });
+
+  it("preserves compaction timeoutSeconds and model", async () => {
+    await withTempHome(async (home) => {
+      const configDir = path.join(home, ".openclaw");
+      await fs.mkdir(configDir, { recursive: true });
+      await fs.writeFile(
+        path.join(configDir, "openclaw.json"),
+        JSON.stringify(
+          {
+            agents: {
+              defaults: {
+                compaction: {
+                  mode: "safeguard",
+                  timeoutSeconds: 600,
+                  model: "anthropic/claude-sonnet-4-6",
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+        "utf-8",
+      );
+
+      const cfg = loadConfig();
+
+      expect(cfg.agents?.defaults?.compaction?.mode).toBe("safeguard");
+      expect(cfg.agents?.defaults?.compaction?.timeoutSeconds).toBe(600);
+      expect(cfg.agents?.defaults?.compaction?.model).toBe("anthropic/claude-sonnet-4-6");
+    });
+  });
 });
