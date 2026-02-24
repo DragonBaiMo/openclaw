@@ -105,6 +105,8 @@ type RunPreparedReplyParams = {
   storePath?: string;
   workspaceDir: string;
   abortedLastRun: boolean;
+  insertOneShotNext?: boolean;
+  insertBoundaryOnly?: boolean;
 };
 
 export async function runPreparedReply(
@@ -378,9 +380,11 @@ export async function runPreparedReply(
   const isStreaming = isEmbeddedPiRunStreaming(sessionIdFinal);
   const shouldSteer = resolvedQueue.mode === "steer" || resolvedQueue.mode === "steer-backlog";
   const shouldFollowup =
-    resolvedQueue.mode === "followup" ||
-    resolvedQueue.mode === "collect" ||
-    resolvedQueue.mode === "steer-backlog";
+    !params.insertBoundaryOnly &&
+    (Boolean(params.insertOneShotNext) ||
+      resolvedQueue.mode === "followup" ||
+      resolvedQueue.mode === "collect" ||
+      resolvedQueue.mode === "steer-backlog");
   const authProfileId = await resolveSessionAuthProfileOverride({
     cfg,
     provider,
@@ -392,6 +396,7 @@ export async function runPreparedReply(
     isNewSession,
   });
   const authProfileIdSource = sessionEntry?.authProfileOverrideSource;
+  const queueKind: "insert" | "normal" = params.insertOneShotNext ? "insert" : "normal";
   const followupRun = {
     prompt: queuedBody,
     messageId: sessionCtx.MessageSidFull ?? sessionCtx.MessageSid,
@@ -403,6 +408,7 @@ export async function runPreparedReply(
     originatingAccountId: ctx.AccountId,
     originatingThreadId: ctx.MessageThreadId,
     originatingChatType: ctx.ChatType,
+    queueKind,
     run: {
       agentId,
       agentDir,
@@ -469,5 +475,6 @@ export async function runPreparedReply(
     sessionCtx,
     shouldInjectGroupIntro,
     typingMode,
+    insertBoundaryOnly: params.insertBoundaryOnly,
   });
 }

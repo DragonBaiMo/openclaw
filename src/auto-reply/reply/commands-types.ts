@@ -51,11 +51,15 @@ export type HandleCommandsParams = {
   contextTokens: number;
   isGroup: boolean;
   skillCommands?: SkillCommandSpec[];
+  insertOneShotNext?: boolean;
+  insertBoundaryOnly?: boolean;
 };
 
 export type CommandHandlerResult = {
   reply?: ReplyPayload;
   shouldContinue: boolean;
+  insertOneShotNext?: boolean;
+  insertBoundaryOnly?: boolean;
 };
 
 export type CommandHandler = (

@@ -315,6 +315,8 @@ export async function getReplyFromConfig(
   }
   directives = inlineActionResult.directives;
   abortedLastRun = inlineActionResult.abortedLastRun ?? abortedLastRun;
+  const insertOneShotNext = inlineActionResult.insertOneShotNext === true;
+  const insertBoundaryOnly = inlineActionResult.insertBoundaryOnly === true;
 
   await stageSandboxMedia({
     ctx,
@@ -368,5 +370,7 @@ export async function getReplyFromConfig(
     storePath,
     workspaceDir,
     abortedLastRun,
+    insertOneShotNext,
+    insertBoundaryOnly,
   });
 }

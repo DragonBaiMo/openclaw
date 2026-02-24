@@ -47,11 +47,18 @@ function resolveSlashCommandName(commandBodyNormalized: string): string | null {
 }
 
 export type InlineActionResult =
-  | { kind: "reply"; reply: ReplyPayload | ReplyPayload[] | undefined }
+  | {
+      kind: "reply";
+      reply: ReplyPayload | ReplyPayload[] | undefined;
+      insertOneShotNext?: boolean;
+      insertBoundaryOnly?: boolean;
+    }
   | {
       kind: "continue";
       directives: InlineDirectives;
       abortedLastRun: boolean;
+      insertOneShotNext?: boolean;
+      insertBoundaryOnly?: boolean;
     };
 
 // oxlint-disable-next-line typescript/no-explicit-any
@@ -363,19 +370,25 @@ export async function handleInlineActions(params: {
   }
 
   let abortedLastRun = initialAbortedLastRun;
+  let insertOneShotNext = false;
+  let insertBoundaryOnly = false;
   if (!sessionEntry && command.abortKey) {
     abortedLastRun = getAbortMemory(command.abortKey) ?? false;
   }
 
   const commandResult = await runCommands(command);
+  insertOneShotNext = Boolean(commandResult.insertOneShotNext);
+  insertBoundaryOnly = Boolean(commandResult.insertBoundaryOnly);
   if (!commandResult.shouldContinue) {
     typing.cleanup();
-    return { kind: "reply", reply: commandResult.reply };
+    return { kind: "reply", reply: commandResult.reply, insertOneShotNext, insertBoundaryOnly };
   }
 
   return {
     kind: "continue",
     directives,
     abortedLastRun,
+    insertOneShotNext,
+    insertBoundaryOnly,
   };
 }

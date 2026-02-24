@@ -4,7 +4,13 @@ import { lookupContextTokens } from "../../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../agents/defaults.js";
 import { resolveModelAuthMode } from "../../agents/model-auth.js";
 import { isCliProvider } from "../../agents/model-selection.js";
-import { queueEmbeddedPiMessage } from "../../agents/pi-embedded.js";
+import {
+  abortEmbeddedPiRun,
+  isEmbeddedPiRunActive,
+  isEmbeddedPiRunStreaming,
+  queueEmbeddedPiMessage,
+  waitForEmbeddedPiRunEnd,
+} from "../../agents/pi-embedded.js";
 import { hasNonzeroUsage } from "../../agents/usage.js";
 import {
   resolveAgentIdFromSessionKey,
@@ -125,6 +131,7 @@ export async function runReplyAgent(params: {
   sessionCtx: TemplateContext;
   shouldInjectGroupIntro: boolean;
   typingMode: TypingMode;
+  insertBoundaryOnly?: boolean;
 }): Promise<ReplyPayload | ReplyPayload[] | undefined> {
   const {
     commandBody,
@@ -151,6 +158,7 @@ export async function runReplyAgent(params: {
     sessionCtx,
     shouldInjectGroupIntro,
     typingMode,
+    insertBoundaryOnly,
   } = params;
 
   let activeSessionEntry = sessionEntry;
@@ -227,11 +235,49 @@ export async function runReplyAgent(params: {
 
   if (shouldSteer && isStreaming) {
     const steered = queueEmbeddedPiMessage(followupRun.run.sessionId, followupRun.prompt);
-    if (steered && !shouldFollowup) {
+    if (steered) {
       await touchActiveSessionEntry();
       typing.cleanup();
       return undefined;
     }
+  }
+
+  if (insertBoundaryOnly) {
+    const sessionId = followupRun.run.sessionId;
+
+    // Guaranteed insert：优先等待“下一次可注入边界”（模型完成一段 JSONL / tool 边界后常会进入 streaming）。
+    const deadlineMs = Date.now() + 5000;
+    let injected = false;
+    while (Date.now() < deadlineMs) {
+      if (!isEmbeddedPiRunActive(sessionId)) {
+        // 当前 run 已结束：立即开启新轮执行这条 insert（不是普通排队，而是升级为 interrupt-insert 的最终兜底语义）。
+        break;
+      }
+      if (isEmbeddedPiRunStreaming(sessionId)) {
+        const ok = queueEmbeddedPiMessage(sessionId, followupRun.prompt);
+        if (ok) {
+          injected = true;
+          break;
+        }
+      }
+      await new Promise((r) => setTimeout(r, 120));
+    }
+
+    if (injected) {
+      await touchActiveSessionEntry();
+      typing.cleanup();
+      return undefined;
+    }
+
+    // 超时仍未命中边界：升级为 interrupt-and-insert，保证消息不丢。
+    if (isEmbeddedPiRunActive(sessionId)) {
+      const aborted = abortEmbeddedPiRun(sessionId);
+      if (aborted) {
+        await waitForEmbeddedPiRunEnd(sessionId, 4000).catch(() => false);
+      }
+    }
+
+    // 继续往下走，直接执行一轮新的 run（不走 followup queue）。
   }
 
   if (isActive && (shouldFollowup || resolvedQueue.mode === "steer")) {
