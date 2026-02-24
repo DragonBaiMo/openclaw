@@ -69,6 +69,7 @@ export async function resolveCommandsSystemPromptBundle(
     try {
       return createOpenClawCodingTools({
         config: params.cfg,
+        agentId: params.agentId,
         workspaceDir,
         sessionKey: params.sessionKey,
         messageProvider: params.command.channel,

@@ -7,6 +7,7 @@ import { getAgentBoundChannels } from "../routing/bindings.js";
 import { listDeliverableMessageChannels } from "../utils/message-channel.js";
 import type { ResolvedTimeFormat } from "./date-time.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
+import type { EmbeddedSandboxInfo } from "./pi-embedded-runner/types.js";
 import { sanitizeForPromptLiteral } from "./sanitize-for-prompt.js";
 
 /**
@@ -18,14 +19,7 @@ import { sanitizeForPromptLiteral } from "./sanitize-for-prompt.js";
 export type PromptMode = "full" | "minimal" | "none";
 type OwnerIdDisplay = "raw" | "hash";
 
-function buildSkillsSection(params: {
-  skillsPrompt?: string;
-  isMinimal: boolean;
-  readToolName: string;
-}) {
-  if (params.isMinimal) {
-    return [];
-  }
+function buildSkillsSection(params: { skillsPrompt?: string; readToolName: string }) {
   const trimmed = params.skillsPrompt?.trim();
   if (!trimmed) {
     return [];
@@ -250,20 +244,7 @@ export function buildAgentSystemPrompt(params: {
     repoRoot?: string;
   };
   messageToolHints?: string[];
-  sandboxInfo?: {
-    enabled: boolean;
-    workspaceDir?: string;
-    containerWorkspaceDir?: string;
-    workspaceAccess?: "none" | "ro" | "rw";
-    agentWorkspaceMount?: string;
-    browserBridgeUrl?: string;
-    browserNoVncUrl?: string;
-    hostBrowserAllowed?: boolean;
-    elevated?: {
-      allowed: boolean;
-      defaultLevel: "on" | "off" | "ask" | "full";
-    };
-  };
+  sandboxInfo?: EmbeddedSandboxInfo;
   /** Reaction guidance for the agent (for Telegram minimal/extensive modes). */
   reactionGuidance?: {
     level: "minimal" | "extensive";
@@ -448,7 +429,6 @@ export function buildAgentSystemPrompt(params: {
   ];
   const skillsSection = buildSkillsSection({
     skillsPrompt,
-    isMinimal,
     readToolName,
   });
   const memorySection = buildMemorySection({

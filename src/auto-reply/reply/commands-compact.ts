@@ -184,6 +184,7 @@ export const handleCompactCommand: CommandHandler = async (params) => {
     spawnedBy: params.sessionEntry.spawnedBy,
     sessionFile,
     workspaceDir: params.workspaceDir,
+    agentDir: params.agentDir,
     config: params.cfg,
     skillsSnapshot: params.sessionEntry.skillsSnapshot,
     provider: resolvedCompactionModel.provider,
