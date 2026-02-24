@@ -43,6 +43,14 @@ export type LocalMediaAccessErrorCode =
   | "invalid-path"
   | "not-file";
 
+function formatLocalMediaAccessHelp(): string {
+  return [
+    "Local file access is restricted.",
+    "Only files under OpenClaw state directories and the agent workspace are allowed by default.",
+    "To send a local file, copy it under your OpenClaw state dir (e.g., $OPENCLAW_STATE_DIR) or the agent workspace, then reference that path.",
+  ].join(" ");
+}
+
 export class LocalMediaAccessError extends Error {
   code: LocalMediaAccessErrorCode;
 
@@ -112,7 +120,7 @@ async function assertLocalMediaAllowed(
   }
   throw new LocalMediaAccessError(
     "path-not-allowed",
-    `Local media path is not under an allowed directory: ${mediaPath}`,
+    `Local media path is not under an allowed directory: ${mediaPath}. ${formatLocalMediaAccessHelp()}`,
   );
 }
 

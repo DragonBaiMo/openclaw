@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertMediaNotDataUrl, resolveSandboxedMediaSource } from "../../agents/sandbox-paths.js";
@@ -9,10 +8,12 @@ import type {
   ChannelThreadingToolContext,
 } from "../../channels/plugins/types.js";
 import type { OpenClawConfig } from "../../config/config.js";
+import { getAgentScopedMediaLocalRoots } from "../../media/local-roots.js";
 import { extensionForMime } from "../../media/mime.js";
 import { parseSlackTarget } from "../../slack/targets.js";
 import { parseTelegramTarget } from "../../telegram/targets.js";
 import { loadWebMedia } from "../../web/media.js";
+import { readLocalFileSafely } from "../fs-safe.js";
 
 export function readBooleanParam(
   params: Record<string, unknown>,
@@ -173,6 +174,7 @@ async function hydrateAttachmentPayload(params: {
   cfg: OpenClawConfig;
   channel: ChannelId;
   accountId?: string | null;
+  agentId?: string;
   args: Record<string, unknown>;
   dryRun?: boolean;
   contentTypeParam?: string | null;
@@ -201,11 +203,14 @@ async function hydrateAttachmentPayload(params: {
       channel: params.channel,
       accountId: params.accountId,
     });
-    // mediaSource already validated by normalizeSandboxMediaList; allow bypass but force explicit readFile.
+
+    const mediaLocalRoots = getAgentScopedMediaLocalRoots(params.cfg, params.agentId);
     const media = await loadWebMedia(mediaSource, {
       maxBytes,
-      sandboxValidated: true,
-      readFile: (filePath: string) => fs.readFile(filePath),
+      localRoots: mediaLocalRoots,
+      readFile: async (filePath: string) => {
+        return (await readLocalFileSafely({ filePath, maxBytes })).buffer;
+      },
     });
     params.args.buffer = media.buffer.toString("base64");
     if (!contentTypeParam && media.contentType) {
@@ -276,6 +281,7 @@ async function hydrateAttachmentActionPayload(params: {
   cfg: OpenClawConfig;
   channel: ChannelId;
   accountId?: string | null;
+  agentId?: string;
   args: Record<string, unknown>;
   dryRun?: boolean;
   /** If caption is missing, copy message -> caption. */
@@ -300,6 +306,7 @@ async function hydrateAttachmentActionPayload(params: {
     cfg: params.cfg,
     channel: params.channel,
     accountId: params.accountId,
+    agentId: params.agentId,
     args: params.args,
     dryRun: params.dryRun,
     contentTypeParam,
@@ -312,6 +319,7 @@ export async function hydrateSetGroupIconParams(params: {
   cfg: OpenClawConfig;
   channel: ChannelId;
   accountId?: string | null;
+  agentId?: string;
   args: Record<string, unknown>;
   action: ChannelMessageActionName;
   dryRun?: boolean;
@@ -326,6 +334,7 @@ export async function hydrateSendAttachmentParams(params: {
   cfg: OpenClawConfig;
   channel: ChannelId;
   accountId?: string | null;
+  agentId?: string;
   args: Record<string, unknown>;
   action: ChannelMessageActionName;
   dryRun?: boolean;

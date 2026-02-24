@@ -115,12 +115,11 @@ export const slackOutbound: ChannelOutboundAdapter = {
     threadId,
     identity,
   }) => {
-    const resolvedMediaLocalRoots = mediaLocalRoots === "any" ? undefined : mediaLocalRoots;
     return await sendSlackOutboundMessage({
       to,
       text,
       mediaUrl,
-      mediaLocalRoots: resolvedMediaLocalRoots,
+      mediaLocalRoots,
       accountId,
       deps,
       replyToId,

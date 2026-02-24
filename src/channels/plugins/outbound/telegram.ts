@@ -38,7 +38,6 @@ export const telegramOutbound: ChannelOutboundAdapter = {
     const send = deps?.sendTelegram ?? sendMessageTelegram;
     const replyToMessageId = parseTelegramReplyToMessageId(replyToId);
     const messageThreadId = parseTelegramThreadId(threadId);
-    const resolvedMediaLocalRoots = mediaLocalRoots === "any" ? undefined : mediaLocalRoots;
     const result = await send(to, text, {
       verbose: false,
       mediaUrl,
@@ -46,7 +45,7 @@ export const telegramOutbound: ChannelOutboundAdapter = {
       messageThreadId,
       replyToMessageId,
       accountId: accountId ?? undefined,
-      mediaLocalRoots: resolvedMediaLocalRoots,
+      mediaLocalRoots,
     });
     return { channel: "telegram", ...result };
   },
@@ -65,7 +64,6 @@ export const telegramOutbound: ChannelOutboundAdapter = {
       : payload.mediaUrl
         ? [payload.mediaUrl]
         : [];
-    const resolvedMediaLocalRoots = mediaLocalRoots === "any" ? undefined : mediaLocalRoots;
     const baseOpts = {
       verbose: false,
       textMode: "html" as const,
@@ -73,7 +71,7 @@ export const telegramOutbound: ChannelOutboundAdapter = {
       replyToMessageId,
       quoteText,
       accountId: accountId ?? undefined,
-      mediaLocalRoots: resolvedMediaLocalRoots,
+      mediaLocalRoots,
     };
 
     if (mediaUrls.length === 0) {

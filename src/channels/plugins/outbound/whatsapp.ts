@@ -25,11 +25,10 @@ export const whatsappOutbound: ChannelOutboundAdapter = {
   sendMedia: async ({ to, text, mediaUrl, mediaLocalRoots, accountId, deps, gifPlayback }) => {
     const send =
       deps?.sendWhatsApp ?? (await import("../../../web/outbound.js")).sendMessageWhatsApp;
-    const resolvedMediaLocalRoots = mediaLocalRoots === "any" ? undefined : mediaLocalRoots;
     const result = await send(to, text, {
       verbose: false,
       mediaUrl,
-      mediaLocalRoots: resolvedMediaLocalRoots,
+      mediaLocalRoots,
       accountId: accountId ?? undefined,
       gifPlayback,
     });
