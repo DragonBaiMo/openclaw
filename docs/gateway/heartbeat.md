@@ -230,8 +230,12 @@ Use `accountId` to target a specific account on multi-account channels like Tele
 ## Delivery behavior
 
 - Heartbeats run in the agent’s main session by default (`agent:<id>:<mainKey>`),
-  or `global` when `session.scope = "global"`. Set `session` to override to a
-  specific channel session (Discord/WhatsApp/etc.).
+  and can be overridden with `heartbeat.session`.
+  - If `session.scope = "global"`, the **default agent** uses `global`.
+  - If `session.scope = "global"`, **non-default agents** use their own
+    `agent:<id>:<mainKey>` session by default (prevents cross-agent last-target routing leaks).
+  - Set `heartbeat.session: "global"` explicitly if a non-default agent should use the global session.
+  - Set `session` to override to a specific channel session (Discord/WhatsApp/etc.).
 - `session` only affects the run context; delivery is controlled by `target` and `to`.
 - To deliver to a specific channel/recipient, set `target` + `to`. With
   `target: "last"`, delivery uses the last external channel for that session.
@@ -354,6 +358,37 @@ If multiple agents have `heartbeat` configured, a manual wake runs each of those
 agent heartbeats immediately.
 
 Use `--mode next-heartbeat` to wait for the next scheduled tick.
+
+## Troubleshooting
+
+### Heartbeat goes to the wrong agent/thread
+
+Symptom: agent `main5` has heartbeat enabled, but the message appears to follow
+`main1` (default agent) routing/history.
+
+Checklist:
+
+1. Confirm the heartbeat is attached to the intended agent:
+
+```json5
+{
+  agents: {
+    list: [
+      { id: "main1", default: true },
+      { id: "main5", heartbeat: { every: "15m", target: "last" } },
+    ],
+  },
+}
+```
+
+2. If you want a non-default agent to share the global session, set it explicitly:
+
+```json5
+{ agents: { list: [{ id: "main5", heartbeat: { session: "global" } }] } }
+```
+
+3. In the Control UI (Agents → Files), check whether `.agents/<agentId>/HEARTBEAT.md`
+   overrides the shared file and confirm the right checklist is being used.
 
 ## Reasoning delivery (optional)
 

@@ -88,6 +88,25 @@ These are the standard files OpenClaw expects inside the workspace:
   - Optional tiny checklist for heartbeat runs.
   - Keep it short to avoid token burn.
 
+### Agent override files in a shared workspace
+
+When multiple agents share one workspace directory, you can override specific
+bootstrap files per agent by placing them under:
+
+- `.agents/<agentId>/AGENTS.md`
+- `.agents/<agentId>/MEMORY.md`
+- `.agents/<agentId>/SOUL.md`
+- `.agents/<agentId>/USER.md`
+- `.agents/<agentId>/HEARTBEAT.md`
+
+Resolution order is:
+
+1. Agent override file (`.agents/<agentId>/<name>.md`)
+2. Workspace shared file (`<workspace>/<name>.md`)
+
+This lets you keep shared defaults at workspace root while giving each agent a
+private override only where needed.
+
 - `BOOT.md`
   - Optional startup checklist executed on gateway restart when internal hooks are enabled.
   - Keep it short; use the message tool for outbound sends.
