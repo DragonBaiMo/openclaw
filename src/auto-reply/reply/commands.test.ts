@@ -2,7 +2,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { compactEmbeddedPiSession } from "../../agents/pi-embedded.js";
+import {
+  abortEmbeddedPiRun,
+  compactEmbeddedPiSession,
+  waitForEmbeddedPiRunEnd,
+} from "../../agents/pi-embedded.js";
 import {
   addSubagentRunForTests,
   listSubagentRunsForRequester,
@@ -41,6 +45,10 @@ vi.mock("../../config/config.js", async () => {
 const readChannelAllowFromStoreMock = vi.hoisted(() => vi.fn());
 const addChannelAllowFromStoreEntryMock = vi.hoisted(() => vi.fn());
 const removeChannelAllowFromStoreEntryMock = vi.hoisted(() => vi.fn());
+const emitAgentEventMock = vi.hoisted(() => vi.fn());
+const cleanStaleLockFilesMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ locks: [], cleaned: [] }),
+);
 
 vi.mock("../../pairing/pairing-store.js", async () => {
   const actual = await vi.importActual<typeof import("../../pairing/pairing-store.js")>(
@@ -94,6 +102,26 @@ vi.mock("../../agents/pi-embedded.js", () => {
 vi.mock("../../infra/system-events.js", () => ({
   enqueueSystemEvent: vi.fn(),
 }));
+
+vi.mock("../../infra/agent-events.js", async () => {
+  const actual = await vi.importActual<typeof import("../../infra/agent-events.js")>(
+    "../../infra/agent-events.js",
+  );
+  return {
+    ...actual,
+    emitAgentEvent: (evt: unknown) => emitAgentEventMock(evt),
+  };
+});
+
+vi.mock("../../agents/session-write-lock.js", async () => {
+  const actual = await vi.importActual<typeof import("../../agents/session-write-lock.js")>(
+    "../../agents/session-write-lock.js",
+  );
+  return {
+    ...actual,
+    cleanStaleLockFiles: (params: unknown) => cleanStaleLockFilesMock(params),
+  };
+});
 
 vi.mock("./session-updates.js", () => ({
   incrementCompactionCount: vi.fn(),
@@ -222,6 +250,7 @@ describe("handleCommands gating", () => {
 describe("/approve command", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    cleanStaleLockFilesMock.mockResolvedValue({ locks: [], cleaned: [] });
   });
 
   it("rejects invalid usage", async () => {
@@ -389,6 +418,149 @@ describe("/compact command", () => {
         groupChannel: "#general",
         groupSpace: "workspace-1",
         spawnedBy: "agent:main:parent",
+      }),
+    );
+
+    expect(cleanStaleLockFilesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ removeStale: true, staleMs: 60_000 }),
+    );
+    expect(emitAgentEventMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("aborts compaction run when manual timeout is reached", async () => {
+    vi.useFakeTimers();
+    try {
+      const cfg = {
+        commands: { text: true },
+        channels: { whatsapp: { allowFrom: ["*"] } },
+        session: { store: "/tmp/openclaw-session-store.json" },
+      } as OpenClawConfig;
+      const params = buildParams("/compact", cfg, {
+        From: "+15550001",
+        To: "+15550002",
+      });
+      vi.mocked(compactEmbeddedPiSession).mockImplementation(
+        () => new Promise<never>(() => undefined),
+      );
+
+      const runPromise = handleCompactCommand(
+        {
+          ...params,
+          sessionEntry: {
+            sessionId: "session-timeout",
+            updatedAt: Date.now(),
+            totalTokens: 12345,
+          },
+        },
+        true,
+      );
+
+      await vi.advanceTimersByTimeAsync(180_001);
+      const result = await runPromise;
+
+      expect(result?.shouldContinue).toBe(false);
+      expect(result?.reply?.text).toContain("timed out after 180s");
+      expect(vi.mocked(abortEmbeddedPiRun)).toHaveBeenCalledWith("session-timeout");
+      expect(vi.mocked(waitForEmbeddedPiRunEnd)).toHaveBeenCalledWith("session-timeout", 15_000);
+      expect(emitAgentEventMock).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          stream: "compaction",
+          data: expect.objectContaining({ phase: "end", timedOut: true }),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses configured compaction timeoutSeconds for manual /compact", async () => {
+    vi.useFakeTimers();
+    try {
+      const cfg = {
+        commands: { text: true },
+        channels: { whatsapp: { allowFrom: ["*"] } },
+        agents: {
+          defaults: {
+            compaction: {
+              timeoutSeconds: 2,
+            },
+          },
+        },
+        session: { store: "/tmp/openclaw-session-store.json" },
+      } as OpenClawConfig;
+      const params = buildParams("/compact", cfg, {
+        From: "+15550001",
+        To: "+15550002",
+      });
+      vi.mocked(compactEmbeddedPiSession).mockImplementation(
+        () => new Promise<never>(() => undefined),
+      );
+
+      const runPromise = handleCompactCommand(
+        {
+          ...params,
+          sessionEntry: {
+            sessionId: "session-timeout-configured",
+            updatedAt: Date.now(),
+            totalTokens: 12345,
+          },
+        },
+        true,
+      );
+
+      await vi.advanceTimersByTimeAsync(2_001);
+      const result = await runPromise;
+
+      expect(result?.shouldContinue).toBe(false);
+      expect(result?.reply?.text).toContain("timed out after 2s");
+      expect(vi.mocked(abortEmbeddedPiRun)).toHaveBeenCalledWith("session-timeout-configured");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses configured compaction model for manual /compact", async () => {
+    const cfg = {
+      commands: { text: true },
+      channels: { whatsapp: { allowFrom: ["*"] } },
+      agents: {
+        defaults: {
+          compaction: {
+            model: "openai/gpt-4.1",
+          },
+        },
+      },
+      session: { store: "/tmp/openclaw-session-store.json" },
+    } as OpenClawConfig;
+    const params = buildParams("/compact", cfg, {
+      From: "+15550001",
+      To: "+15550002",
+    });
+    vi.mocked(compactEmbeddedPiSession).mockResolvedValueOnce({
+      ok: true,
+      compacted: false,
+    });
+
+    const result = await handleCompactCommand(
+      {
+        ...params,
+        provider: "anthropic",
+        model: "claude-opus-4-5",
+        sessionEntry: {
+          sessionId: "session-model-override",
+          updatedAt: Date.now(),
+          totalTokens: 12345,
+        },
+      },
+      true,
+    );
+
+    expect(result?.shouldContinue).toBe(false);
+    expect(vi.mocked(compactEmbeddedPiSession)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "openai",
+        model: "gpt-4.1",
       }),
     );
   });
