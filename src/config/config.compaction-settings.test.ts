@@ -1,6 +1,8 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "./config.js";
-import { withTempHomeConfig } from "./test-helpers.js";
+import { withTempHome, withTempHomeConfig } from "./test-helpers.js";
 
 describe("config compaction settings", () => {
   it("preserves memory flush config values", async () => {
@@ -79,7 +81,7 @@ describe("config compaction settings", () => {
   });
 
   it("preserves compaction timeoutSeconds and model", async () => {
-    await withTempHome(async (home) => {
+    await withTempHome(async (home: string) => {
       const configDir = path.join(home, ".openclaw");
       await fs.mkdir(configDir, { recursive: true });
       await fs.writeFile(

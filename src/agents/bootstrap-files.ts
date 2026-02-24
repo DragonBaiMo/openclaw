@@ -1,5 +1,4 @@
 import type { OpenClawConfig } from "../config/config.js";
-import { getOrLoadBootstrapFiles } from "./bootstrap-cache.js";
 import { applyBootstrapHookOverrides } from "./bootstrap-hooks.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
 import {
@@ -67,7 +66,7 @@ export async function resolveBootstrapFilesForRun(params: {
     }
   }
 
-  return applyBootstrapHookOverrides({
+  const updated = await applyBootstrapHookOverrides({
     files: filterBootstrapFilesForSession(bootstrapFiles, sessionKey),
     workspaceDir: params.workspaceDir,
     config: params.config,

@@ -35,7 +35,11 @@ vi.mock("./gateway.ts", () => {
     constructor(
       private opts: {
         onHello?: (hello: unknown) => void;
-        onClose?: (info: { code: number; reason: string }) => void;
+        onClose?: (info: {
+          code: number;
+          reason: string;
+          error?: { code: string; message: string; details?: unknown };
+        }) => void;
         onGap?: (info: { expected: number; received: number }) => void;
         onEvent?: (evt: { event: string; payload?: unknown; seq?: number }) => void;
       },

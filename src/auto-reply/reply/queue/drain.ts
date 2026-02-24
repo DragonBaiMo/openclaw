@@ -21,7 +21,6 @@ export function scheduleFollowupDrain(
   if (!queue) {
     return;
   }
-  queue.draining = true;
   let shouldScheduleAgain = true;
   void (async () => {
     try {
@@ -40,6 +39,7 @@ export function scheduleFollowupDrain(
           shouldScheduleAgain = false;
           break;
         }
+
         await waitForQueueDebounce(queue);
         if (queue.mode === "collect") {
           // Once the batch is mixed, never collect again within this drain.
@@ -66,6 +66,7 @@ export function scheduleFollowupDrain(
             };
           });
 
+          const collectState: { forceIndividualCollect: boolean } = { forceIndividualCollect };
           const collectDrainResult = await drainCollectQueueStep({
             collectState,
             isCrossChannel,
@@ -75,9 +76,9 @@ export function scheduleFollowupDrain(
           if (collectDrainResult === "empty") {
             break;
           }
+          forceIndividualCollect = collectState.forceIndividualCollect;
           if (collectDrainResult === "drained") {
-            shouldScheduleAgain = false;
-            break;
+            continue;
           }
 
           const items = queue.items.slice();
