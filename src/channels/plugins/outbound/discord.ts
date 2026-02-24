@@ -116,10 +116,11 @@ export const discordOutbound: ChannelOutboundAdapter = {
   }) => {
     const send = deps?.sendDiscord ?? sendMessageDiscord;
     const target = resolveDiscordOutboundTarget({ to, threadId });
+    const resolvedMediaLocalRoots = mediaLocalRoots === "any" ? undefined : mediaLocalRoots;
     const result = await send(target, text, {
       verbose: false,
       mediaUrl,
-      mediaLocalRoots,
+      mediaLocalRoots: resolvedMediaLocalRoots,
       replyTo: replyToId ?? undefined,
       accountId: accountId ?? undefined,
       silent: silent ?? undefined,

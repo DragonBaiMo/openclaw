@@ -34,12 +34,13 @@ export const imessageOutbound: ChannelOutboundAdapter = {
   sendMedia: async ({ cfg, to, text, mediaUrl, mediaLocalRoots, accountId, deps, replyToId }) => {
     const send = deps?.sendIMessage ?? sendMessageIMessage;
     const maxBytes = resolveIMessageMaxBytes({ cfg, accountId });
+    const resolvedMediaLocalRoots = mediaLocalRoots === "any" ? undefined : mediaLocalRoots;
     const result = await send(to, text, {
       mediaUrl,
       maxBytes,
       accountId: accountId ?? undefined,
       replyToId: replyToId ?? undefined,
-      mediaLocalRoots,
+      mediaLocalRoots: resolvedMediaLocalRoots,
     });
     return { channel: "imessage", ...result };
   },
