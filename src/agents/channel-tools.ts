@@ -7,6 +7,7 @@ import type {
 } from "../channels/plugins/types.js";
 import { normalizeAnyChannelId } from "../channels/registry.js";
 import type { OpenClawConfig } from "../config/config.js";
+import { getAgentBoundChannels } from "../routing/bindings.js";
 import { defaultRuntime } from "../runtime.js";
 
 /**
@@ -48,10 +49,18 @@ export function listAllChannelSupportedActions(params: {
   return Array.from(actions);
 }
 
-export function listChannelAgentTools(params: { cfg?: OpenClawConfig }): ChannelAgentTool[] {
-  // Channel docking: aggregate channel-owned tools (login, etc.).
+export function listChannelAgentTools(params: {
+  cfg?: OpenClawConfig;
+  agentId?: string;
+}): ChannelAgentTool[] {
+  const boundChannels = params.cfg
+    ? getAgentBoundChannels(params.cfg, params.agentId)
+    : new Set<string>();
   const tools: ChannelAgentTool[] = [];
   for (const plugin of listChannelPlugins()) {
+    if (!boundChannels.has(plugin.id)) {
+      continue;
+    }
     const entry = plugin.agentTools;
     if (!entry) {
       continue;
