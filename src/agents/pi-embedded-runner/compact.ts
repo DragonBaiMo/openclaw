@@ -32,6 +32,7 @@ import { formatUserTime, resolveUserTimeFormat, resolveUserTimezone } from "../d
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../defaults.js";
 import { resolveOpenClawDocsPath } from "../docs-path.js";
 import { getApiKeyForModel, resolveModelAuthMode } from "../model-auth.js";
+import { parseModelRef } from "../model-selection.js";
 import { ensureOpenClawModelsJson } from "../models-config.js";
 import {
   ensureSessionHeader,
@@ -59,7 +60,7 @@ import {
 import { resolveTranscriptPolicy } from "../transcript-policy.js";
 import {
   compactWithSafetyTimeout,
-  EMBEDDED_COMPACTION_TIMEOUT_MS,
+  resolveCompactionTimeoutMs,
 } from "./compaction-safety-timeout.js";
 import { buildEmbeddedExtensionFactories } from "./extensions.js";
 import {
@@ -253,9 +254,20 @@ export async function compactEmbeddedPiSessionDirect(
   const runId = params.runId ?? params.sessionId;
   const resolvedWorkspace = resolveUserPath(params.workspaceDir);
   const prevCwd = process.cwd();
+  const compactionTimeoutMs = resolveCompactionTimeoutMs(params.config);
 
-  const provider = (params.provider ?? DEFAULT_PROVIDER).trim() || DEFAULT_PROVIDER;
-  const modelId = (params.model ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
+  let provider = (params.provider ?? DEFAULT_PROVIDER).trim() || DEFAULT_PROVIDER;
+  let modelId = (params.model ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
+  const configuredCompactionModel = params.config?.agents?.defaults?.compaction?.model;
+  if (typeof configuredCompactionModel === "string") {
+    const parsedCompactionModel = parseModelRef(configuredCompactionModel, provider);
+    if (parsedCompactionModel) {
+      provider = parsedCompactionModel.provider;
+      modelId = parsedCompactionModel.model;
+    } else {
+      log.warn(`Ignoring invalid agents.defaults.compaction.model: ${configuredCompactionModel}`);
+    }
+  }
   const fail = (reason: string): EmbeddedPiCompactResult => {
     log.warn(
       `[compaction-diag] end runId=${runId} sessionKey=${params.sessionKey ?? params.sessionId} ` +
@@ -514,7 +526,7 @@ export async function compactEmbeddedPiSessionDirect(
     const sessionLock = await acquireSessionWriteLock({
       sessionFile: params.sessionFile,
       maxHoldMs: resolveSessionLockMaxHoldFromTimeout({
-        timeoutMs: EMBEDDED_COMPACTION_TIMEOUT_MS,
+        timeoutMs: compactionTimeoutMs,
       }),
     });
     try {
@@ -657,8 +669,9 @@ export async function compactEmbeddedPiSessionDirect(
         }
 
         const compactStartedAt = Date.now();
-        const result = await compactWithSafetyTimeout(() =>
-          session.compact(params.customInstructions),
+        const result = await compactWithSafetyTimeout(
+          () => session.compact(params.customInstructions),
+          compactionTimeoutMs,
         );
         // Estimate tokens after compaction by summing token estimates for remaining messages
         let tokensAfter: number | undefined;

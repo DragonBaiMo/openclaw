@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { OpenClawConfig } from "../config/config.js";
 import {
   compactWithSafetyTimeout,
   EMBEDDED_COMPACTION_TIMEOUT_MS,
+  resolveCompactionTimeoutMs,
 } from "./pi-embedded-runner/compaction-safety-timeout.js";
 
 describe("compactWithSafetyTimeout", () => {
@@ -41,5 +43,36 @@ describe("compactWithSafetyTimeout", () => {
       }, 30),
     ).rejects.toBe(error);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("returns embedded default when compaction timeout is not configured", () => {
+    expect(resolveCompactionTimeoutMs(undefined)).toBe(EMBEDDED_COMPACTION_TIMEOUT_MS);
+    expect(resolveCompactionTimeoutMs({})).toBe(EMBEDDED_COMPACTION_TIMEOUT_MS);
+  });
+
+  it("returns configured timeoutSeconds in milliseconds", () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        defaults: {
+          compaction: {
+            timeoutSeconds: 600,
+          },
+        },
+      },
+    };
+    expect(resolveCompactionTimeoutMs(cfg)).toBe(600_000);
+  });
+
+  it("falls back to default for non-positive timeoutSeconds", () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        defaults: {
+          compaction: {
+            timeoutSeconds: 0,
+          },
+        },
+      },
+    };
+    expect(resolveCompactionTimeoutMs(cfg)).toBe(EMBEDDED_COMPACTION_TIMEOUT_MS);
   });
 });
