@@ -13,6 +13,18 @@ installGatewayTestHooks({ scope: "suite" });
 
 const resolveMainKey = () => resolveMainSessionKeyFromConfig();
 
+async function waitForSystemEventInSession(sessionKey: string, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const events = peekSystemEvents(sessionKey);
+    if (events.length > 0) {
+      return events;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timeout waiting for system event in session ${sessionKey}`);
+}
+
 describe("gateway server hooks", () => {
   test("handles auth, wake, and agent flows", async () => {
     testState.hooksConfig = { enabled: true, token: "hook-secret" };
@@ -155,6 +167,27 @@ describe("gateway server hooks", () => {
       const headerEvents = await waitForSystemEvent();
       expect(headerEvents.some((e) => e.includes("Header auth"))).toBe(true);
       drainSystemEvents(resolveMainKey());
+
+      const targetedSessionKey = "agent:hooks:main";
+      const resTargetedWake = await fetch(`http://127.0.0.1:${port}/hooks/wake`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer hook-secret",
+        },
+        body: JSON.stringify({
+          text: "Targeted wake event",
+          mode: "next-heartbeat",
+          session: targetedSessionKey,
+        }),
+      });
+      expect(resTargetedWake.status).toBe(200);
+      const targetedEvents = await waitForSystemEventInSession(targetedSessionKey);
+      expect(targetedEvents.some((e) => e.includes("Targeted wake event"))).toBe(true);
+      expect(
+        peekSystemEvents(resolveMainKey()).some((e) => e.includes("Targeted wake event")),
+      ).toBe(false);
+      drainSystemEvents(targetedSessionKey);
 
       const resGet = await fetch(`http://127.0.0.1:${port}/hooks/wake`, {
         method: "GET",

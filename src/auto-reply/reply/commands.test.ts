@@ -328,6 +328,57 @@ describe("/approve command", () => {
   });
 });
 
+describe("/insert command", () => {
+  it("rewrites /insert prompt and marks one-shot followup", async () => {
+    const cfg = {
+      commands: { text: true },
+      channels: { whatsapp: { allowFrom: ["*"] } },
+    } as OpenClawConfig;
+    const params = buildParams("/insert Please rerun with stricter filters", cfg);
+
+    const result = await handleCommands(params);
+
+    expect(result.shouldContinue).toBe(true);
+    expect(result.insertOneShotNext).toBe(true);
+    expect(params.ctx.CommandBody).toBe("Please rerun with stricter filters");
+    expect(params.ctx.Body).toBe("Please rerun with stricter filters");
+  });
+
+  it("accepts telegram /insert@bot using normalized fallback", async () => {
+    const cfg = {
+      commands: { text: true },
+      channels: { telegram: { allowFrom: ["*"] } },
+    } as OpenClawConfig;
+    const params = buildParams("/insert@openclaw rerun this", cfg, {
+      Provider: "telegram",
+      Surface: "telegram",
+      CommandBody: "/insert@openclaw rerun this",
+      RawBody: "/insert@openclaw rerun this",
+      Body: "/insert@openclaw rerun this",
+    });
+    params.command.commandBodyNormalized = "/insert rerun this";
+
+    const result = await handleCommands(params);
+
+    expect(result.shouldContinue).toBe(true);
+    expect(result.insertOneShotNext).toBe(true);
+    expect(params.ctx.CommandBody).toBe("rerun this");
+  });
+
+  it("rejects empty /insert", async () => {
+    const cfg = {
+      commands: { text: true },
+      channels: { whatsapp: { allowFrom: ["*"] } },
+    } as OpenClawConfig;
+    const params = buildParams("/insert", cfg);
+
+    const result = await handleCommands(params);
+
+    expect(result.shouldContinue).toBe(false);
+    expect(result.reply?.text).toContain("Usage: /insert <message>");
+  });
+});
+
 describe("/compact command", () => {
   beforeEach(() => {
     vi.clearAllMocks();

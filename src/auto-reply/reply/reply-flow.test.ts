@@ -602,6 +602,7 @@ function createRun(params: {
   originatingTo?: string;
   originatingAccountId?: string;
   originatingThreadId?: string | number;
+  queueKind?: FollowupRun["queueKind"];
 }): FollowupRun {
   return {
     prompt: params.prompt,
@@ -611,6 +612,7 @@ function createRun(params: {
     originatingTo: params.originatingTo,
     originatingAccountId: params.originatingAccountId,
     originatingThreadId: params.originatingThreadId,
+    queueKind: params.queueKind,
     run: {
       agentId: "agent",
       agentDir: "/tmp",
@@ -1045,6 +1047,60 @@ describe("followup queue collect routing", () => {
     await done.promise;
     expect(calls[0]?.prompt).toContain("[Queue overflow] Dropped 1 message due to cap.");
     expect(calls[0]?.prompt).toContain("- first");
+  });
+});
+
+describe("followup queue insert one-shot", () => {
+  it("runs insert next and pauses normal queue drain", async () => {
+    const key = `test-insert-one-shot-${Date.now()}`;
+    const calls: FollowupRun[] = [];
+    const done = createDeferred<void>();
+    const runFollowup = async (run: FollowupRun) => {
+      calls.push(run);
+      if (calls.length >= 2) {
+        done.resolve();
+      }
+    };
+    const settings: QueueSettings = {
+      mode: "followup",
+      debounceMs: 0,
+      cap: 50,
+      dropPolicy: "summarize",
+    };
+
+    enqueueFollowupRun(
+      key,
+      createRun({
+        prompt: "normal queued",
+        queueKind: "normal",
+      }),
+      settings,
+    );
+    enqueueFollowupRun(
+      key,
+      createRun({
+        prompt: "insert first",
+        queueKind: "insert",
+      }),
+      settings,
+    );
+
+    scheduleFollowupDrain(key, runFollowup);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.prompt).toBe("insert first");
+
+    scheduleFollowupDrain(key, runFollowup);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(calls).toHaveLength(1);
+
+    scheduleFollowupDrain(key, runFollowup);
+    await done.promise;
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.prompt).toBe("normal queued");
   });
 });
 

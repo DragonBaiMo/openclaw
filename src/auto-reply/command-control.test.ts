@@ -513,5 +513,15 @@ describe("control command parsing", () => {
         botUsername: "openclaw",
       }),
     ).toBe(true);
+    expect(
+      hasControlCommand("/insert@openclaw now", undefined, {
+        botUsername: "openclaw",
+      }),
+    ).toBe(true);
+    expect(
+      hasControlCommand("/insert@otherbot now", undefined, {
+        botUsername: "openclaw",
+      }),
+    ).toBe(false);
   });
 });

@@ -65,8 +65,8 @@ export async function handleCommands(params: HandleCommandsParams): Promise<Comm
       handleDebugCommand,
       handleModelsCommand,
       handleStopCommand,
-      handleCompactCommand,
       handleInsertCommand,
+      handleCompactCommand,
       handleAbortTrigger,
     ];
   }

@@ -91,6 +91,14 @@ describe("gateway hooks helpers", () => {
       ok: true,
       value: { text: "hi", mode: "now" },
     });
+    expect(normalizeWakePayload({ text: "hi", session: "  agent:ops:main  " })).toEqual({
+      ok: true,
+      value: { text: "hi", mode: "now", sessionKey: "agent:ops:main" },
+    });
+    expect(normalizeWakePayload({ text: "hi", sessionKey: "  agent:qa:main  " })).toEqual({
+      ok: true,
+      value: { text: "hi", mode: "now", sessionKey: "agent:qa:main" },
+    });
     expect(normalizeWakePayload({ text: "  ", mode: "now" }).ok).toBe(false);
   });
 

@@ -206,17 +206,25 @@ export function normalizeHookHeaders(req: IncomingMessage) {
   return headers;
 }
 
-export function normalizeWakePayload(
-  payload: Record<string, unknown>,
-):
-  | { ok: true; value: { text: string; mode: "now" | "next-heartbeat" } }
+export function normalizeWakePayload(payload: Record<string, unknown>):
+  | {
+      ok: true;
+      value: { text: string; mode: "now" | "next-heartbeat"; sessionKey?: string };
+    }
   | { ok: false; error: string } {
   const text = typeof payload.text === "string" ? payload.text.trim() : "";
   if (!text) {
     return { ok: false, error: "text required" };
   }
   const mode = payload.mode === "next-heartbeat" ? "next-heartbeat" : "now";
-  return { ok: true, value: { text, mode } };
+  const sessionRaw =
+    typeof payload.sessionKey === "string"
+      ? payload.sessionKey
+      : typeof payload.session === "string"
+        ? payload.session
+        : "";
+  const sessionKey = sessionRaw.trim() || undefined;
+  return { ok: true, value: { text, mode, sessionKey } };
 }
 
 export type HookAgentPayload = {
