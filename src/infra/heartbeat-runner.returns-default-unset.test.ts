@@ -790,6 +790,173 @@ describe("runHeartbeatOnce", () => {
     }
   });
 
+  it("uses non-default agent main session by default for heartbeats even when session scope is global", async () => {
+    const tmpDir = await createCaseDir("hb-global-scope-nondefault-route");
+    const storeTemplate = path.join(tmpDir, "stores", "{agentId}", "sessions.json");
+    const replySpy = vi.spyOn(replyModule, "getReplyFromConfig");
+    try {
+      const cfg: OpenClawConfig = {
+        agents: {
+          defaults: {
+            heartbeat: { every: "30m", target: "last" },
+          },
+          list: [
+            { id: "main1", default: true, workspace: tmpDir },
+            {
+              id: "main5",
+              workspace: tmpDir,
+              heartbeat: { every: "15m", target: "last", prompt: "Main5 check" },
+            },
+          ],
+        },
+        channels: { whatsapp: { allowFrom: ["*"] } },
+        session: { scope: "global", store: storeTemplate },
+      };
+
+      const defaultStorePath = resolveStorePath(storeTemplate, { agentId: "main1" });
+      const main5StorePath = resolveStorePath(storeTemplate, { agentId: "main5" });
+      const main5SessionKey = resolveAgentMainSessionKey({ cfg, agentId: "main5" });
+
+      await fs.mkdir(path.dirname(defaultStorePath), { recursive: true });
+      await fs.mkdir(path.dirname(main5StorePath), { recursive: true });
+      await fs.writeFile(
+        defaultStorePath,
+        JSON.stringify({
+          global: {
+            sessionId: "sid-global-main1",
+            updatedAt: Date.now(),
+            lastChannel: "whatsapp",
+            lastTo: "+1111",
+          },
+        }),
+      );
+      await fs.writeFile(
+        main5StorePath,
+        JSON.stringify({
+          [main5SessionKey]: {
+            sessionId: "sid-main5",
+            updatedAt: Date.now(),
+            lastChannel: "whatsapp",
+            lastTo: "+5555",
+          },
+        }),
+      );
+
+      replySpy.mockResolvedValue([{ text: "Main5 alert" }]);
+      const sendWhatsApp = vi.fn<NonNullable<HeartbeatDeps["sendWhatsApp"]>>().mockResolvedValue({
+        messageId: "m1",
+        toJid: "jid",
+      });
+
+      await runHeartbeatOnce({
+        cfg,
+        agentId: "main5",
+        deps: createHeartbeatDeps(sendWhatsApp),
+      });
+
+      expect(sendWhatsApp).toHaveBeenCalledTimes(1);
+      expect(sendWhatsApp).toHaveBeenCalledWith("+5555", "Main5 alert", expect.any(Object));
+      expect(replySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          SessionKey: main5SessionKey,
+          From: "+5555",
+          To: "+5555",
+          Provider: "heartbeat",
+        }),
+        expect.objectContaining({ isHeartbeat: true, suppressToolErrorWarnings: false }),
+        cfg,
+      );
+    } finally {
+      replySpy.mockRestore();
+    }
+  });
+
+  it("still honors explicit heartbeat.session=global for non-default agent heartbeats", async () => {
+    const tmpDir = await createCaseDir("hb-global-scope-explicit-global");
+    const storeTemplate = path.join(tmpDir, "stores", "{agentId}", "sessions.json");
+    const replySpy = vi.spyOn(replyModule, "getReplyFromConfig");
+    try {
+      const cfg: OpenClawConfig = {
+        agents: {
+          defaults: {
+            heartbeat: { every: "30m", target: "last" },
+          },
+          list: [
+            { id: "main1", default: true, workspace: tmpDir },
+            {
+              id: "main5",
+              workspace: tmpDir,
+              heartbeat: {
+                every: "15m",
+                target: "last",
+                session: "global",
+                prompt: "Main5 global check",
+              },
+            },
+          ],
+        },
+        channels: { whatsapp: { allowFrom: ["*"] } },
+        session: { scope: "global", store: storeTemplate },
+      };
+
+      const defaultStorePath = resolveStorePath(storeTemplate, { agentId: "main1" });
+      const main5StorePath = resolveStorePath(storeTemplate, { agentId: "main5" });
+      const main5SessionKey = resolveAgentMainSessionKey({ cfg, agentId: "main5" });
+
+      await fs.mkdir(path.dirname(defaultStorePath), { recursive: true });
+      await fs.mkdir(path.dirname(main5StorePath), { recursive: true });
+      await fs.writeFile(
+        defaultStorePath,
+        JSON.stringify({
+          global: {
+            sessionId: "sid-global-main1",
+            updatedAt: Date.now(),
+            lastChannel: "whatsapp",
+            lastTo: "+1111",
+          },
+        }),
+      );
+      await fs.writeFile(
+        main5StorePath,
+        JSON.stringify({
+          [main5SessionKey]: {
+            sessionId: "sid-main5",
+            updatedAt: Date.now(),
+            lastChannel: "whatsapp",
+            lastTo: "+5555",
+          },
+        }),
+      );
+
+      replySpy.mockResolvedValue([{ text: "Global route alert" }]);
+      const sendWhatsApp = vi.fn<NonNullable<HeartbeatDeps["sendWhatsApp"]>>().mockResolvedValue({
+        messageId: "m1",
+        toJid: "jid",
+      });
+
+      await runHeartbeatOnce({
+        cfg,
+        agentId: "main5",
+        deps: createHeartbeatDeps(sendWhatsApp),
+      });
+
+      expect(sendWhatsApp).toHaveBeenCalledTimes(1);
+      expect(sendWhatsApp).toHaveBeenCalledWith("+1111", "Global route alert", expect.any(Object));
+      expect(replySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          SessionKey: "global",
+          From: "+1111",
+          To: "+1111",
+          Provider: "heartbeat",
+        }),
+        expect.objectContaining({ isHeartbeat: true, suppressToolErrorWarnings: false }),
+        cfg,
+      );
+    } finally {
+      replySpy.mockRestore();
+    }
+  });
+
   it("suppresses duplicate heartbeat payloads within 24h", async () => {
     const tmpDir = await createCaseDir("hb-dup-suppress");
     const storePath = path.join(tmpDir, "sessions.json");

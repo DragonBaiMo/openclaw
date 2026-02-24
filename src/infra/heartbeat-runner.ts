@@ -270,21 +270,33 @@ function resolveHeartbeatSession(
   const sessionCfg = cfg.session;
   const scope = sessionCfg?.scope ?? "per-sender";
   const resolvedAgentId = normalizeAgentId(agentId ?? resolveDefaultAgentId(cfg));
-  const mainSessionKey =
-    scope === "global" ? "global" : resolveAgentMainSessionKey({ cfg, agentId: resolvedAgentId });
-  const storeAgentId = scope === "global" ? resolveDefaultAgentId(cfg) : resolvedAgentId;
-  const storePath = resolveStorePath(sessionCfg?.store, {
-    agentId: storeAgentId,
-  });
-  const store = loadSessionStore(storePath);
-  const mainEntry = store[mainSessionKey];
+  const defaultAgentId = normalizeAgentId(resolveDefaultAgentId(cfg));
+  const agentMainSessionKey = resolveAgentMainSessionKey({ cfg, agentId: resolvedAgentId });
 
-  if (scope === "global") {
-    return { sessionKey: mainSessionKey, storePath, store, entry: mainEntry };
-  }
+  const resolveSessionFromStore = (sessionKey: string, storeAgentId: string) => {
+    const storePath = resolveStorePath(sessionCfg?.store, {
+      agentId: normalizeAgentId(storeAgentId),
+    });
+    const store = loadSessionStore(storePath);
+    return {
+      sessionKey,
+      storePath,
+      store,
+      entry: store[sessionKey],
+    };
+  };
+
+  const resolveGlobalSession = () => resolveSessionFromStore("global", defaultAgentId);
+  const useGlobalSessionByDefault = scope === "global" && resolvedAgentId === defaultAgentId;
+  const resolvedDefaultSession = useGlobalSessionByDefault
+    ? resolveGlobalSession()
+    : resolveSessionFromStore(agentMainSessionKey, resolvedAgentId);
 
   const forced = forcedSessionKey?.trim();
   if (forced) {
+    if (scope === "global" && forced.toLowerCase() === "global") {
+      return resolveGlobalSession();
+    }
     const forcedCandidate = toAgentStoreSessionKey({
       agentId: resolvedAgentId,
       requestKey: forced,
@@ -295,27 +307,34 @@ function resolveHeartbeatSession(
       agentId: resolvedAgentId,
       sessionKey: forcedCandidate,
     });
-    if (forcedCanonical !== "global") {
-      const sessionAgentId = resolveAgentIdFromSessionKey(forcedCanonical);
-      if (sessionAgentId === normalizeAgentId(resolvedAgentId)) {
-        return {
-          sessionKey: forcedCanonical,
-          storePath,
-          store,
-          entry: store[forcedCanonical],
-        };
+    if (forcedCanonical === "global") {
+      if (scope === "global") {
+        return resolveGlobalSession();
       }
+      return resolvedDefaultSession;
+    }
+    const sessionAgentId = resolveAgentIdFromSessionKey(forcedCanonical);
+    if (sessionAgentId === normalizeAgentId(resolvedAgentId)) {
+      return {
+        sessionKey: forcedCanonical,
+        storePath: resolvedDefaultSession.storePath,
+        store: resolvedDefaultSession.store,
+        entry: resolvedDefaultSession.store[forcedCanonical],
+      };
     }
   }
 
   const trimmed = heartbeat?.session?.trim() ?? "";
   if (!trimmed) {
-    return { sessionKey: mainSessionKey, storePath, store, entry: mainEntry };
+    return resolvedDefaultSession;
   }
 
   const normalized = trimmed.toLowerCase();
-  if (normalized === "main" || normalized === "global") {
-    return { sessionKey: mainSessionKey, storePath, store, entry: mainEntry };
+  if (scope === "global" && normalized === "global") {
+    return resolveGlobalSession();
+  }
+  if (normalized === "main") {
+    return scope === "global" ? resolveGlobalSession() : resolvedDefaultSession;
   }
 
   const candidate = toAgentStoreSessionKey({
@@ -328,19 +347,23 @@ function resolveHeartbeatSession(
     agentId: resolvedAgentId,
     sessionKey: candidate,
   });
-  if (canonical !== "global") {
-    const sessionAgentId = resolveAgentIdFromSessionKey(canonical);
-    if (sessionAgentId === normalizeAgentId(resolvedAgentId)) {
-      return {
-        sessionKey: canonical,
-        storePath,
-        store,
-        entry: store[canonical],
-      };
+  if (canonical === "global") {
+    if (scope === "global") {
+      return resolveGlobalSession();
     }
+    return resolvedDefaultSession;
+  }
+  const sessionAgentId = resolveAgentIdFromSessionKey(canonical);
+  if (sessionAgentId === normalizeAgentId(resolvedAgentId)) {
+    return {
+      sessionKey: canonical,
+      storePath: resolvedDefaultSession.storePath,
+      store: resolvedDefaultSession.store,
+      entry: resolvedDefaultSession.store[canonical],
+    };
   }
 
-  return { sessionKey: mainSessionKey, storePath, store, entry: mainEntry };
+  return resolvedDefaultSession;
 }
 
 function resolveHeartbeatReasoningPayloads(
