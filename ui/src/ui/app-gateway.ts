@@ -79,6 +79,12 @@ type GatewayHost = {
   chatSkipNextQueueDrain?: boolean;
 };
 
+type GatewayConnectDeps = {
+  createClient?: (
+    opts: ConstructorParameters<typeof GatewayBrowserClient>[0],
+  ) => GatewayBrowserClient;
+};
+
 function scheduleChatResync(host: GatewayHost, delayMs: number = 350) {
   if (host.chatSyncTimer != null) {
     return;
@@ -148,7 +154,7 @@ function applySessionDefaults(host: GatewayHost, defaults?: SessionDefaultsSnaps
   }
 }
 
-export function connectGateway(host: GatewayHost) {
+export function connectGateway(host: GatewayHost, deps: GatewayConnectDeps = {}) {
   host.lastError = null;
   host.hello = null;
   host.connected = false;
@@ -162,7 +168,8 @@ export function connectGateway(host: GatewayHost) {
   const reconnectCleanupEpoch = host.reconnectCleanupEpoch;
 
   const previousClient = host.client;
-  const client = new GatewayBrowserClient({
+  const createClient = deps.createClient ?? ((opts) => new GatewayBrowserClient(opts));
+  const client = createClient({
     url: host.settings.gatewayUrl,
     token: host.settings.token.trim() ? host.settings.token : undefined,
     password: host.password.trim() ? host.password : undefined,

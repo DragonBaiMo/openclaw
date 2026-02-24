@@ -180,14 +180,6 @@ function buildChatCommands(): ChatCommandDefinition[] {
       category: "management",
     }),
     defineChatCommand({
-      key: "insert",
-      description: "Run one queued follow-up immediately after the current turn.",
-      textAlias: "/insert",
-      acceptsArgs: true,
-      scope: "text",
-      category: "session",
-    }),
-    defineChatCommand({
       key: "approve",
       nativeName: "approve",
       description: "Approve or deny exec requests.",

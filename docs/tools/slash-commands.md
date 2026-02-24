@@ -92,6 +92,7 @@ Text + native (when enabled):
 - `/tts off|always|inbound|tagged|status|provider|limit|summary|audio` (control TTS; see [/tts](/tts))
   - Discord: native command is `/voice` (Discord reserves `/tts`); text `/tts` still works.
 - `/stop`
+- `/insert <message>` (queue one-shot insert for the active run; boundary-first injection with interrupt fallback)
 - `/restart`
 - `/dock-telegram` (alias: `/dock_telegram`) (switch replies to Telegram)
 - `/dock-discord` (alias: `/dock_discord`) (switch replies to Discord)
