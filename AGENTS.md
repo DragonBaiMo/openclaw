@@ -16,6 +16,16 @@ Minimum merge protocol:
 2. Read keeper sections in `LOCAL_CHANGELOG.md` and verify corresponding files still preserve behavior.
 3. After merge, run the keeper regression checks listed in `LOCAL_CHANGELOG.md`.
 
+Local change rule (required):
+
+- Before changing this local repo, always read `LOCAL_CHANGELOG.md` first.
+- If a change touches business behavior/decision (not just syntax, naming, or mechanical refactor), do **not** decide silently by yourself.
+- Ask the user in plain language first:
+  1. what behavior you plan to change,
+  2. what user-facing effect it may cause,
+  3. what scenarios might break or become different.
+- Only implement after user confirmation. Avoid unilateral behavior changes.
+
 ## Project Structure & Module Organization
 
 - Source code: `src/` (CLI wiring in `src/cli`, commands in `src/commands`, web provider in `src/provider-web.ts`, infra in `src/infra`, media pipeline in `src/media`).
