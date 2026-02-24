@@ -1,7 +1,9 @@
 import { createHmac, createHash } from "node:crypto";
 import type { ReasoningLevel, ThinkLevel } from "../auto-reply/thinking.js";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
+import type { OpenClawConfig } from "../config/config.js";
 import type { MemoryCitationsMode } from "../config/types.memory.js";
+import { getAgentBoundChannels } from "../routing/bindings.js";
 import { listDeliverableMessageChannels } from "../utils/message-channel.js";
 import type { ResolvedTimeFormat } from "./date-time.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
@@ -147,7 +149,9 @@ function buildMessagingSection(params: {
           "### message tool",
           "- Use `message` for proactive sends + channel actions (polls, reactions, etc.).",
           "- For `action=send`, include `to` and `message`.",
-          `- If multiple channels are configured, pass \`channel\` (${params.messageChannelOptions}).`,
+          params.messageChannelOptions
+            ? `- If multiple channels are configured, pass \`channel\` (${params.messageChannelOptions}).`
+            : "",
           `- If you use \`message\` (\`action=send\`) to deliver your user-visible reply, respond with ONLY: ${SILENT_REPLY_TOKEN} (avoid duplicate replies).`,
           params.inlineButtonsEnabled
             ? "- Inline buttons supported. Use `action=send` with `buttons=[[{text,callback_data,style?}]]`; `style` can be `primary`, `success`, or `danger`."
@@ -194,6 +198,7 @@ function buildDocsSection(params: { docsPath?: string; isMinimal: boolean; readT
 
 export function buildAgentSystemPrompt(params: {
   workspaceDir: string;
+  config?: OpenClawConfig;
   defaultThinkLevel?: ThinkLevel;
   reasoningLevel?: ReasoningLevel;
   extraSystemPrompt?: string;
@@ -382,7 +387,18 @@ export function buildAgentSystemPrompt(params: {
     .filter(Boolean);
   const runtimeCapabilitiesLower = new Set(runtimeCapabilities.map((cap) => cap.toLowerCase()));
   const inlineButtonsEnabled = runtimeCapabilitiesLower.has("inlinebuttons");
-  const messageChannelOptions = listDeliverableMessageChannels().join("|");
+  const allMessageChannels = listDeliverableMessageChannels();
+  const messageChannelOptions = (() => {
+    const agentId = runtimeInfo?.agentId;
+    if (!params.config || !agentId) {
+      return allMessageChannels.join("|");
+    }
+    const boundChannels = getAgentBoundChannels(params.config, agentId);
+    if (boundChannels.size === 0) {
+      return "";
+    }
+    return allMessageChannels.filter((channel) => boundChannels.has(channel)).join("|");
+  })();
   const promptMode = params.promptMode ?? "full";
   const isMinimal = promptMode === "minimal" || promptMode === "none";
   const sandboxContainerWorkspace = params.sandboxInfo?.containerWorkspaceDir?.trim();

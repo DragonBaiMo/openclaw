@@ -83,6 +83,7 @@ export function buildSystemPrompt(params: {
   const ttsHint = params.config ? buildTtsSystemPromptHint(params.config) : undefined;
   return buildAgentSystemPrompt({
     workspaceDir: params.workspaceDir,
+    config: params.config,
     defaultThinkLevel: params.defaultThinkLevel,
     extraSystemPrompt: params.extraSystemPrompt,
     ownerNumbers: params.ownerNumbers,
