@@ -145,6 +145,10 @@ export class OpenClawApp extends LitElement {
   @state() chatAvatarUrl: string | null = null;
   @state() chatThinkingLevel: string | null = null;
   @state() chatQueue: ChatQueueItem[] = [];
+  @state() chatInsertNext: ChatQueueItem | null = null;
+  @state() chatSkipNextQueueDrain = false;
+  @state() chatActivityLeaseUntil: number | null = null;
+  @state() chatSyncTimer: number | null = null;
   @state() chatAttachments: ChatAttachment[] = [];
   @state() chatManualRefreshInFlight = false;
   // Sidebar state for tool output viewing

@@ -200,6 +200,11 @@ export function handleChatEvent(state: ChatState, payload?: ChatEventPayload) {
   }
 
   if (payload.state === "delta") {
+    if (!state.chatRunId && payload.runId) {
+      state.chatRunId = payload.runId;
+      state.chatStream = "";
+      state.chatStreamStartedAt = Date.now();
+    }
     const next = extractText(payload.message);
     if (typeof next === "string") {
       const current = state.chatStream ?? "";

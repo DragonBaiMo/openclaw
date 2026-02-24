@@ -136,4 +136,20 @@ describe("app-tool-stream fallback lifecycle handling", () => {
     expect(host.fallbackStatus?.previous).toBe("deepinfra/moonshotai/Kimi-K2.5");
     vi.useRealTimers();
   });
+
+  it("rejects compaction events without sessionKey", () => {
+    vi.useFakeTimers();
+    const host = createHost();
+
+    handleAgentEvent(host, {
+      runId: "run-1",
+      seq: 1,
+      stream: "compaction",
+      ts: Date.now(),
+      data: { phase: "start" },
+    });
+
+    expect(host.compactionStatus).toBeNull();
+    vi.useRealTimers();
+  });
 });

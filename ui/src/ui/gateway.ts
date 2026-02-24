@@ -307,6 +307,6 @@ export class GatewayBrowserClient {
     }
     this.connectTimer = window.setTimeout(() => {
       void this.sendConnect();
-    }, 750);
+    }, 150);
   }
 }

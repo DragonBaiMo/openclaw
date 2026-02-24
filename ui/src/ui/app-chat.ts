@@ -15,16 +15,51 @@ export type ChatHost = {
   chatMessage: string;
   chatAttachments: ChatAttachment[];
   chatQueue: ChatQueueItem[];
+  chatInsertNext?: ChatQueueItem | null;
+  chatSkipNextQueueDrain?: boolean;
+  chatActivityLeaseUntil?: number | null;
   chatRunId: string | null;
   chatSending: boolean;
+  chatStream: string | null;
+  chatStreamStartedAt: number | null;
   sessionKey: string;
   basePath: string;
   hello: GatewayHelloOk | null;
   chatAvatarUrl: string | null;
   refreshSessionsAfterChat: Set<string>;
+  lastError?: string | null;
 };
 
 export const CHAT_SESSIONS_ACTIVE_MINUTES = 120;
+export const CHAT_ACTIVITY_LEASE_MS = 12_000;
+
+export function touchChatActivityLease(host: ChatHost, leaseMs: number = CHAT_ACTIVITY_LEASE_MS) {
+  host.chatActivityLeaseUntil = Date.now() + leaseMs;
+}
+
+export function clearChatActivityLease(host: ChatHost) {
+  host.chatActivityLeaseUntil = null;
+}
+
+type ChatInsertCommand = {
+  isInsert: boolean;
+  message: string;
+};
+
+function parseChatInsertCommand(text: string): ChatInsertCommand {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return { isInsert: false, message: "" };
+  }
+  const match = trimmed.match(/^\/insert(?=$|\s|:)(?:\s+|:)?([\s\S]*)$/i);
+  if (!match) {
+    return { isInsert: false, message: trimmed };
+  }
+  return {
+    isInsert: true,
+    message: (match[1] ?? "").trim(),
+  };
+}
 
 export function isChatBusy(host: ChatHost) {
   return host.chatSending || Boolean(host.chatRunId);
@@ -62,10 +97,41 @@ function isChatResetCommand(text: string) {
 
 export async function handleAbortChat(host: ChatHost) {
   if (!host.connected) {
+    host.chatRunId = null;
+    host.chatStream = null;
+    host.chatStreamStartedAt = null;
+    clearChatActivityLease(host);
+    if ("lastError" in host) {
+      host.lastError = "Disconnected — stop command could not reach the server. Reconnecting…";
+    }
     return;
   }
+  host.chatInsertNext = null;
+  host.chatSkipNextQueueDrain = false;
+  host.chatQueue = [];
   host.chatMessage = "";
   await abortChatRun(host as unknown as OpenClawApp);
+}
+
+function createQueueItem(params: {
+  text: string;
+  attachments?: ChatAttachment[];
+  refreshSessions?: boolean;
+  kind?: "normal" | "insert";
+}): ChatQueueItem | null {
+  const trimmed = params.text.trim();
+  const hasAttachments = Boolean(params.attachments && params.attachments.length > 0);
+  if (!trimmed && !hasAttachments) {
+    return null;
+  }
+  return {
+    id: generateUUID(),
+    text: trimmed,
+    createdAt: Date.now(),
+    attachments: hasAttachments ? params.attachments?.map((att) => ({ ...att })) : undefined,
+    refreshSessions: params.refreshSessions,
+    kind: params.kind ?? "normal",
+  };
 }
 
 function enqueueChatMessage(
@@ -73,22 +139,37 @@ function enqueueChatMessage(
   text: string,
   attachments?: ChatAttachment[],
   refreshSessions?: boolean,
+  opts?: { priority?: "head" | "tail"; kind?: "normal" | "insert" },
 ) {
-  const trimmed = text.trim();
-  const hasAttachments = Boolean(attachments && attachments.length > 0);
-  if (!trimmed && !hasAttachments) {
+  const item = createQueueItem({
+    text,
+    attachments,
+    refreshSessions,
+    kind: opts?.kind,
+  });
+  if (!item) {
     return;
   }
-  host.chatQueue = [
-    ...host.chatQueue,
-    {
-      id: generateUUID(),
-      text: trimmed,
-      createdAt: Date.now(),
-      attachments: hasAttachments ? attachments?.map((att) => ({ ...att })) : undefined,
-      refreshSessions,
-    },
-  ];
+  host.chatQueue =
+    opts?.priority === "head" ? [item, ...host.chatQueue] : [...host.chatQueue, item];
+}
+
+function setInsertNextMessage(
+  host: ChatHost,
+  text: string,
+  attachments?: ChatAttachment[],
+  refreshSessions?: boolean,
+) {
+  const item = createQueueItem({
+    text,
+    attachments,
+    refreshSessions,
+    kind: "insert",
+  });
+  if (!item) {
+    return;
+  }
+  host.chatInsertNext = item;
 }
 
 async function sendChatMessageNow(
@@ -101,6 +182,7 @@ async function sendChatMessageNow(
     previousAttachments?: ChatAttachment[];
     restoreAttachments?: boolean;
     refreshSessions?: boolean;
+    skipAutoQueueDrain?: boolean;
   },
 ) {
   resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
@@ -125,7 +207,7 @@ async function sendChatMessageNow(
     host.chatAttachments = opts.previousAttachments;
   }
   scheduleChatScroll(host as unknown as Parameters<typeof scheduleChatScroll>[0]);
-  if (ok && !host.chatRunId) {
+  if (ok && !host.chatRunId && !opts?.skipAutoQueueDrain) {
     void flushChatQueue(host);
   }
   if (ok && opts?.refreshSessions && runId) {
@@ -153,6 +235,10 @@ async function flushChatQueue(host: ChatHost) {
 }
 
 export function removeQueuedMessage(host: ChatHost, id: string) {
+  if (host.chatInsertNext?.id === id) {
+    host.chatInsertNext = null;
+    return;
+  }
   host.chatQueue = host.chatQueue.filter((item) => item.id !== id);
 }
 
@@ -165,9 +251,11 @@ export async function handleSendChat(
     return;
   }
   const previousDraft = host.chatMessage;
-  const message = (messageOverride ?? host.chatMessage).trim();
+  const rawMessage = (messageOverride ?? host.chatMessage).trim();
   const attachments = host.chatAttachments ?? [];
   const attachmentsToSend = messageOverride == null ? attachments : [];
+  const insertCmd = parseChatInsertCommand(rawMessage);
+  const message = insertCmd.isInsert ? insertCmd.message : rawMessage;
   const hasAttachments = attachmentsToSend.length > 0;
 
   // Allow sending with just attachments (no message text required)
@@ -188,7 +276,14 @@ export async function handleSendChat(
   }
 
   if (isChatBusy(host)) {
-    enqueueChatMessage(host, message, attachmentsToSend, refreshSessions);
+    if (insertCmd.isInsert) {
+      setInsertNextMessage(host, message, attachmentsToSend, refreshSessions);
+      return;
+    }
+    enqueueChatMessage(host, message, attachmentsToSend, refreshSessions, {
+      priority: "tail",
+      kind: "normal",
+    });
     return;
   }
 
@@ -215,7 +310,29 @@ export async function refreshChat(host: ChatHost, opts?: { scheduleScroll?: bool
   }
 }
 
-export const flushChatQueueForEvent = flushChatQueue;
+export async function flushChatQueueForEvent(host: ChatHost) {
+  if (!host.connected || isChatBusy(host)) {
+    return;
+  }
+  const nextInsert = host.chatInsertNext;
+  if (nextInsert) {
+    host.chatInsertNext = null;
+    const ok = await sendChatMessageNow(host, nextInsert.text, {
+      attachments: nextInsert.attachments,
+      refreshSessions: nextInsert.refreshSessions,
+      skipAutoQueueDrain: true,
+    });
+    if (!ok) {
+      host.chatInsertNext = nextInsert;
+      return;
+    }
+    host.chatSkipNextQueueDrain = true;
+    return;
+  }
+  if (host.chatSkipNextQueueDrain) {
+    host.chatSkipNextQueueDrain = false;
+  }
+}
 
 type SessionDefaultsSnapshot = {
   defaultAgentId?: string;

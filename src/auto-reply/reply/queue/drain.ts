@@ -28,13 +28,15 @@ export function scheduleFollowupDrain(
       while (queue.items.length > 0 || queue.droppedCount > 0 || Boolean(queue.insertNext)) {
         if (queue.insertNext) {
           const queued = queue.insertNext;
-          queue.insertNext = null;
           await runFollowup(queued);
+          queue.insertNext = null;
+          queue.skipNextDrain = true;
           shouldScheduleAgain = false;
           break;
         }
         if (queue.skipNextDrain) {
           queue.skipNextDrain = false;
+          shouldScheduleAgain = false;
           break;
         }
         await waitForQueueDebounce(queue);

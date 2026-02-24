@@ -103,6 +103,8 @@ export const zh_CN: TranslationMap = {
     disconnected: "已断开与网关的连接。",
     refreshTitle: "刷新聊天数据",
     thinkingToggle: "切换助手思考/工作输出",
+    thinkingHiddenToggle: "思考已隐藏：前端显示开关已关闭",
+    thinkingHiddenReasoning: "思考已隐藏：当前会话 reasoning 级别为 off",
     focusToggle: "切换专注模式 (隐藏侧边栏 + 页面页眉)",
     onboardingDisabled: "引导期间禁用",
   },

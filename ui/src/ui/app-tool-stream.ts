@@ -264,6 +264,13 @@ const COMPACTION_TOAST_DURATION_MS = 5000;
 const FALLBACK_TOAST_DURATION_MS = 8000;
 
 export function handleCompactionEvent(host: CompactionHost, payload: AgentEventPayload) {
+  const sessionKey = typeof payload.sessionKey === "string" ? payload.sessionKey : undefined;
+  if (!sessionKey) {
+    return;
+  }
+  if (sessionKey !== host.sessionKey) {
+    return;
+  }
   const data = payload.data ?? {};
   const phase = typeof data.phase === "string" ? data.phase : "";
 
@@ -315,6 +322,9 @@ function resolveAcceptedSession(
     return { accepted: false };
   }
   if (!host.chatRunId) {
+    if (sessionKey) {
+      return { accepted: true, sessionKey };
+    }
     return { accepted: false };
   }
   return { accepted: true, sessionKey };

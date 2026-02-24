@@ -2,7 +2,13 @@ import {
   GATEWAY_EVENT_UPDATE_AVAILABLE,
   type GatewayUpdateAvailableEventPayload,
 } from "../../../src/gateway/events.js";
-import { CHAT_SESSIONS_ACTIVE_MINUTES, flushChatQueueForEvent } from "./app-chat.ts";
+import {
+  CHAT_ACTIVITY_LEASE_MS,
+  CHAT_SESSIONS_ACTIVE_MINUTES,
+  clearChatActivityLease,
+  flushChatQueueForEvent,
+  touchChatActivityLease,
+} from "./app-chat.ts";
 import type { EventLogEntry } from "./app-events.ts";
 import {
   applySettings,
@@ -65,7 +71,23 @@ type GatewayHost = {
   execApprovalQueue: ExecApprovalRequest[];
   execApprovalError: string | null;
   updateAvailable: UpdateAvailable | null;
+  reconnectCleanupTimer?: number | null;
+  reconnectCleanupEpoch?: number;
+  chatActivityLeaseUntil?: number | null;
+  chatSyncTimer?: number | null;
+  chatInsertNext?: import("./ui-types.ts").ChatQueueItem | null;
+  chatSkipNextQueueDrain?: boolean;
 };
+
+function scheduleChatResync(host: GatewayHost, delayMs: number = 350) {
+  if (host.chatSyncTimer != null) {
+    return;
+  }
+  host.chatSyncTimer = window.setTimeout(() => {
+    host.chatSyncTimer = null;
+    void loadChatHistory(host as unknown as OpenClawApp);
+  }, delayMs);
+}
 
 type SessionDefaultsSnapshot = {
   defaultAgentId?: string;
@@ -132,6 +154,12 @@ export function connectGateway(host: GatewayHost) {
   host.connected = false;
   host.execApprovalQueue = [];
   host.execApprovalError = null;
+  if (host.reconnectCleanupTimer != null) {
+    window.clearTimeout(host.reconnectCleanupTimer);
+    host.reconnectCleanupTimer = null;
+  }
+  host.reconnectCleanupEpoch = (host.reconnectCleanupEpoch ?? 0) + 1;
+  const reconnectCleanupEpoch = host.reconnectCleanupEpoch;
 
   const previousClient = host.client;
   const client = new GatewayBrowserClient({
@@ -148,12 +176,44 @@ export function connectGateway(host: GatewayHost) {
       host.lastError = null;
       host.hello = hello;
       applySnapshot(host, hello);
-      // Reset orphaned chat run state from before disconnect.
-      // Any in-flight run's final event was lost during the disconnect window.
-      host.chatRunId = null;
-      (host as unknown as { chatStream: string | null }).chatStream = null;
-      (host as unknown as { chatStreamStartedAt: number | null }).chatStreamStartedAt = null;
-      resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
+      if ((host.chatActivityLeaseUntil ?? 0) > Date.now()) {
+        touchChatActivityLease(host as unknown as Parameters<typeof touchChatActivityLease>[0]);
+      }
+      if (host.chatRunId) {
+        const preservedRunId = host.chatRunId;
+        const cleanupTimer = window.setTimeout(() => {
+          if ((host.chatActivityLeaseUntil ?? 0) > Date.now()) {
+            if (host.reconnectCleanupTimer === cleanupTimer) {
+              host.reconnectCleanupTimer = null;
+            }
+            return;
+          }
+          if (
+            host.client === client &&
+            host.reconnectCleanupEpoch === reconnectCleanupEpoch &&
+            host.chatRunId === preservedRunId
+          ) {
+            host.chatRunId = null;
+            (host as unknown as { chatStream: string | null }).chatStream = null;
+            (host as unknown as { chatStreamStartedAt: number | null }).chatStreamStartedAt = null;
+            clearChatActivityLease(host as unknown as Parameters<typeof clearChatActivityLease>[0]);
+            resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
+            if (host.chatInsertNext) {
+              void flushChatQueueForEvent(
+                host as unknown as Parameters<typeof flushChatQueueForEvent>[0],
+              );
+            }
+          }
+          if (host.reconnectCleanupTimer === cleanupTimer) {
+            host.reconnectCleanupTimer = null;
+          }
+        }, 8000);
+        host.reconnectCleanupTimer = cleanupTimer;
+      } else {
+        host.reconnectCleanupTimer = null;
+        resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
+      }
+      scheduleChatResync(host, 300);
       void loadAssistantIdentity(host as unknown as OpenClawApp);
       void loadAgents(host as unknown as OpenClawApp);
       void loadNodes(host as unknown as OpenClawApp, { quiet: true });
@@ -181,6 +241,7 @@ export function connectGateway(host: GatewayHost) {
         return;
       }
       host.lastError = `event gap detected (expected seq ${expected}, got ${received}); refresh recommended`;
+      scheduleChatResync(host, 200);
     },
   });
   host.client = client;
@@ -209,10 +270,19 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
     if (host.onboarding) {
       return;
     }
-    handleAgentEvent(
-      host as unknown as Parameters<typeof handleAgentEvent>[0],
-      evt.payload as AgentEventPayload | undefined,
-    );
+    const payload = evt.payload as AgentEventPayload | undefined;
+    const eventSessionKey =
+      typeof payload?.sessionKey === "string" ? payload.sessionKey : undefined;
+    const isHostSessionEvent =
+      (eventSessionKey && eventSessionKey === host.sessionKey) ||
+      (!eventSessionKey && payload?.runId && host.chatRunId && payload.runId === host.chatRunId);
+    if (isHostSessionEvent) {
+      touchChatActivityLease(
+        host as unknown as Parameters<typeof touchChatActivityLease>[0],
+        CHAT_ACTIVITY_LEASE_MS,
+      );
+    }
+    handleAgentEvent(host as unknown as Parameters<typeof handleAgentEvent>[0], payload);
     return;
   }
 
@@ -225,9 +295,20 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
       );
     }
     const state = handleChatEvent(host as unknown as OpenClawApp, payload);
+    if (state === "delta") {
+      touchChatActivityLease(host as unknown as Parameters<typeof touchChatActivityLease>[0]);
+    }
     if (state === "final" || state === "error" || state === "aborted") {
+      clearChatActivityLease(host as unknown as Parameters<typeof clearChatActivityLease>[0]);
       resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
-      void flushChatQueueForEvent(host as unknown as Parameters<typeof flushChatQueueForEvent>[0]);
+      if (host.chatInsertNext || host.chatSkipNextQueueDrain) {
+        void flushChatQueueForEvent(
+          host as unknown as Parameters<typeof flushChatQueueForEvent>[0],
+        );
+      }
+      if (state !== "final") {
+        scheduleChatResync(host, 150);
+      }
       const runId = payload?.runId;
       if (runId && host.refreshSessionsAfterChat.has(runId)) {
         host.refreshSessionsAfterChat.delete(runId);
@@ -251,6 +332,11 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
       host.presenceError = null;
       host.presenceStatus = null;
     }
+    return;
+  }
+
+  if (evt.event === "history.updated") {
+    scheduleChatResync(host, 50);
     return;
   }
 

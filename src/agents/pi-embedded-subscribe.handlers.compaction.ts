@@ -11,6 +11,7 @@ export function handleAutoCompactionStart(ctx: EmbeddedPiSubscribeContext) {
   emitAgentEvent({
     runId: ctx.params.runId,
     stream: "compaction",
+    sessionKey: ctx.params.sessionKey,
     data: { phase: "start" },
   });
   void ctx.params.onAgentEvent?.({
@@ -50,6 +51,7 @@ export function handleAutoCompactionEnd(
   emitAgentEvent({
     runId: ctx.params.runId,
     stream: "compaction",
+    sessionKey: ctx.params.sessionKey,
     data: { phase: "end", willRetry },
   });
   void ctx.params.onAgentEvent?.({

@@ -65,6 +65,10 @@ export type AppViewState = {
   chatAvatarUrl: string | null;
   chatThinkingLevel: string | null;
   chatQueue: ChatQueueItem[];
+  chatInsertNext: ChatQueueItem | null;
+  chatSkipNextQueueDrain: boolean;
+  chatActivityLeaseUntil: number | null;
+  chatSyncTimer: number | null;
   chatManualRefreshInFlight: boolean;
   nodesLoading: boolean;
   nodes: Array<Record<string, unknown>>;

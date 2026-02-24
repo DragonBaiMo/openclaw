@@ -181,25 +181,72 @@ describe("chat view", () => {
     expect(container.textContent).not.toContain("New session");
   });
 
-  it("shows a new session button when aborting is unavailable", () => {
+  it("still shows stop button when aborting is unavailable", () => {
     const container = document.createElement("div");
-    const onNewSession = vi.fn();
+    const onAbort = vi.fn();
     render(
       renderChat(
         createProps({
           canAbort: false,
-          onNewSession,
+          onAbort,
         }),
       ),
       container,
     );
 
-    const newSessionButton = Array.from(container.querySelectorAll("button")).find(
-      (btn) => btn.textContent?.trim() === "New session",
+    const stopButton = Array.from(container.querySelectorAll("button")).find(
+      (btn) => btn.textContent?.trim() === "Stop",
     );
-    expect(newSessionButton).not.toBeUndefined();
-    newSessionButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    expect(onNewSession).toHaveBeenCalledTimes(1);
-    expect(container.textContent).not.toContain("Stop");
+    expect(stopButton).not.toBeUndefined();
+    stopButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain("New session");
+  });
+
+  it("shows thinking hidden reason when ui toggle is off", () => {
+    const container = document.createElement("div");
+    render(
+      renderChat(
+        createProps({
+          showThinking: false,
+          sessions: {
+            ...createSessions(),
+            sessions: [{ key: "main", reasoningLevel: "high" }],
+          } as unknown as SessionsListResult,
+        }),
+      ),
+      container,
+    );
+    expect(container.textContent).toContain("Thinking hidden");
+  });
+
+  it("shows thinking hidden reason when session reasoning is off", () => {
+    const container = document.createElement("div");
+    render(
+      renderChat(
+        createProps({
+          showThinking: true,
+          sessions: {
+            ...createSessions(),
+            sessions: [{ key: "main", reasoningLevel: "off" }],
+          } as unknown as SessionsListResult,
+        }),
+      ),
+      container,
+    );
+    expect(container.textContent).toContain("session reasoning level is off");
+  });
+
+  it("shows insert-next queue label", () => {
+    const container = document.createElement("div");
+    render(
+      renderChat(
+        createProps({
+          queue: [{ id: "i1", text: "urgent", createdAt: 1, kind: "insert" }],
+        }),
+      ),
+      container,
+    );
+    expect(container.textContent).toContain("insert next");
   });
 });

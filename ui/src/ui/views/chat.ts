@@ -1,6 +1,7 @@
 import { html, nothing } from "lit";
 import { ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
+import { t } from "../../i18n/index.ts";
 import {
   renderMessageGroup,
   renderReadingIndicatorGroup,
@@ -240,10 +241,14 @@ function renderAttachmentPreview(props: ChatProps) {
 export function renderChat(props: ChatProps) {
   const canCompose = props.connected;
   const isBusy = props.sending || props.stream !== null;
-  const canAbort = Boolean(props.canAbort && props.onAbort);
   const activeSession = props.sessions?.sessions?.find((row) => row.key === props.sessionKey);
   const reasoningLevel = activeSession?.reasoningLevel ?? "off";
   const showReasoning = props.showThinking && reasoningLevel !== "off";
+  const thinkingHiddenReason = !props.showThinking
+    ? t("chat.thinkingHiddenToggle")
+    : reasoningLevel === "off"
+      ? t("chat.thinkingHiddenReasoning")
+      : null;
   const assistantIdentity = {
     name: props.assistantName,
     avatar: props.assistantAvatar ?? props.assistantAvatarUrl ?? null,
@@ -253,7 +258,7 @@ export function renderChat(props: ChatProps) {
   const composePlaceholder = props.connected
     ? hasAttachments
       ? "Add a message or paste more images..."
-      : "Message (↩ to send, Shift+↩ for line breaks, paste images)"
+      : "Message (/insert ... runs next only, ↩ send, Shift+↩ line break, paste images)"
     : "Connect to the gateway to start chatting…";
 
   const splitRatio = props.splitRatio ?? 0.6;
@@ -385,6 +390,13 @@ export function renderChat(props: ChatProps) {
                           item.text ||
                           (item.attachments?.length ? `Image (${item.attachments.length})` : "")
                         }
+                        ${
+                          item.kind === "insert"
+                            ? html`
+                                <span class="muted">(insert next)</span>
+                              `
+                            : nothing
+                        }
                       </div>
                       <button
                         class="btn chat-queue__remove"
@@ -405,6 +417,11 @@ export function renderChat(props: ChatProps) {
 
       ${renderFallbackIndicator(props.fallbackStatus)}
       ${renderCompactionIndicator(props.compactionStatus)}
+      ${
+        thinkingHiddenReason
+          ? html`<div class="muted" role="status" aria-live="polite">${thinkingHiddenReason}</div>`
+          : nothing
+      }
 
       ${
         props.showNewMessages
@@ -460,10 +477,10 @@ export function renderChat(props: ChatProps) {
           <div class="chat-compose__actions">
             <button
               class="btn"
-              ?disabled=${!props.connected || (!canAbort && props.sending)}
-              @click=${canAbort ? props.onAbort : props.onNewSession}
+              ?disabled=${!props.connected || props.sending}
+              @click=${props.onAbort}
             >
-              ${canAbort ? "Stop" : "New session"}
+              Stop
             </button>
             <button
               class="btn primary"

@@ -104,6 +104,8 @@ export const en: TranslationMap = {
     disconnected: "Disconnected from gateway.",
     refreshTitle: "Refresh chat data",
     thinkingToggle: "Toggle assistant thinking/working output",
+    thinkingHiddenToggle: "Thinking hidden: UI toggle is off",
+    thinkingHiddenReasoning: "Thinking hidden: session reasoning level is off",
     focusToggle: "Toggle focus mode (hide sidebar + page header)",
     onboardingDisabled: "Disabled during onboarding",
   },
