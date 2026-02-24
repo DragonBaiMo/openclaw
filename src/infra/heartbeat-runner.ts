@@ -104,6 +104,11 @@ const EXEC_EVENT_PROMPT =
   "An async command you ran earlier has completed. The result is shown in the system messages above. " +
   "Please relay the command output to the user in a helpful way. If the command succeeded, share the relevant output. " +
   "If it failed, explain what went wrong.";
+
+const WAKE_EVENT_PROMPT =
+  "A system event was queued and is shown in the system messages above. " +
+  "Please proactively notify the user with a concise, actionable update. " +
+  "Do not reply HEARTBEAT_OK. If user input is required (question/permission), ask clearly for the exact decision needed.";
 export { isCronSystemEvent };
 
 type HeartbeatAgentState = {
@@ -567,17 +572,27 @@ export async function runHeartbeatOnce(opts: {
   heartbeat?: HeartbeatConfig;
   reason?: string;
   deps?: HeartbeatDeps;
+  /**
+   * Allow event-driven targeted wake runs even when periodic heartbeat is disabled
+   * for this agent. Used by webhook/session-targeted wake flows.
+   */
+  allowDisabledForWake?: boolean;
 }): Promise<HeartbeatRunResult> {
   const cfg = opts.cfg ?? loadConfig();
   const agentId = normalizeAgentId(opts.agentId ?? resolveDefaultAgentId(cfg));
   const heartbeat = opts.heartbeat ?? resolveHeartbeatConfig(cfg, agentId);
-  if (!heartbeatsEnabled) {
+  const reasonKind = resolveHeartbeatReasonKind(opts.reason);
+  const isTargetedWake =
+    Boolean(opts.sessionKey || opts.agentId) && (reasonKind === "hook" || reasonKind === "wake");
+  const allowDisabledForWake = opts.allowDisabledForWake === true || isTargetedWake;
+
+  if (!heartbeatsEnabled && !allowDisabledForWake) {
     return { status: "skipped", reason: "disabled" };
   }
-  if (!isHeartbeatEnabledForAgent(cfg, agentId)) {
+  if (!allowDisabledForWake && !isHeartbeatEnabledForAgent(cfg, agentId)) {
     return { status: "skipped", reason: "disabled" };
   }
-  if (!resolveHeartbeatIntervalMs(cfg, undefined, heartbeat)) {
+  if (!allowDisabledForWake && !resolveHeartbeatIntervalMs(cfg, undefined, heartbeat)) {
     return { status: "skipped", reason: "disabled" };
   }
 
@@ -587,7 +602,9 @@ export async function runHeartbeatOnce(opts: {
   }
 
   const queueSize = (opts.deps?.getQueueSize ?? getQueueSize)(CommandLane.Main);
-  if (queueSize > 0) {
+  const shouldBypassQueueGateForWake =
+    allowDisabledForWake && (reasonKind === "hook" || reasonKind === "wake");
+  if (queueSize > 0 && !shouldBypassQueueGateForWake) {
     return { status: "skipped", reason: "requests-in-flight" };
   }
 
@@ -654,16 +671,26 @@ export async function runHeartbeatOnce(opts: {
     .map((event) => event.text);
   const hasExecCompletion = pendingEvents.some(isExecCompletionEvent);
   const hasCronEvents = cronEvents.length > 0;
+  const hasWakeEvents =
+    !hasExecCompletion && !hasCronEvents && reasonKind === "hook" && pendingEvents.length > 0;
   const prompt = hasExecCompletion
     ? EXEC_EVENT_PROMPT
     : hasCronEvents
       ? buildCronEventPrompt(cronEvents)
-      : resolveHeartbeatPrompt(cfg, heartbeat);
+      : hasWakeEvents
+        ? WAKE_EVENT_PROMPT
+        : resolveHeartbeatPrompt(cfg, heartbeat);
   const ctx = {
     Body: appendCronStyleCurrentTimeLine(prompt, cfg, startedAt),
     From: sender,
     To: sender,
-    Provider: hasExecCompletion ? "exec-event" : hasCronEvents ? "cron-event" : "heartbeat",
+    Provider: hasExecCompletion
+      ? "exec-event"
+      : hasCronEvents
+        ? "cron-event"
+        : hasWakeEvents
+          ? "wake-event"
+          : "heartbeat",
     SessionKey: sessionKey,
   };
   if (!visibility.showAlerts && !visibility.showOk && !visibility.useIndicator) {
@@ -1067,6 +1094,48 @@ export function startHeartbeatRunner(opts: {
         reason: "disabled",
       } satisfies HeartbeatRunResult;
     }
+
+    const reason = params?.reason;
+    const requestedAgentId = params?.agentId ? normalizeAgentId(params.agentId) : undefined;
+    const requestedSessionKey = params?.sessionKey?.trim() || undefined;
+    const isTargeted = Boolean(requestedSessionKey || requestedAgentId);
+
+    // Targeted wake (hooks/session-scoped wake) must not depend on periodic heartbeat registration.
+    if (isTargeted) {
+      const startedAt = Date.now();
+      const now = startedAt;
+      const targetAgentId = requestedAgentId ?? resolveAgentIdFromSessionKey(requestedSessionKey);
+      const targetAgent = state.agents.get(targetAgentId);
+      const targetHeartbeat =
+        targetAgent?.heartbeat ?? resolveHeartbeatConfig(state.cfg, targetAgentId);
+      try {
+        const res = await runOnce({
+          cfg: state.cfg,
+          agentId: targetAgentId,
+          heartbeat: targetHeartbeat,
+          reason,
+          sessionKey: requestedSessionKey,
+          deps: { runtime: state.runtime },
+          allowDisabledForWake: true,
+        });
+        if (targetAgent && (res.status !== "skipped" || res.reason !== "disabled")) {
+          advanceAgentSchedule(targetAgent, now);
+        }
+        scheduleNext();
+        return res.status === "ran" ? { status: "ran", durationMs: Date.now() - startedAt } : res;
+      } catch (err) {
+        const errMsg = formatErrorMessage(err);
+        log.error(`heartbeat runner: targeted runOnce threw unexpectedly: ${errMsg}`, {
+          error: errMsg,
+        });
+        if (targetAgent) {
+          advanceAgentSchedule(targetAgent, now);
+        }
+        scheduleNext();
+        return { status: "failed", reason: errMsg };
+      }
+    }
+
     if (!heartbeatsEnabled) {
       return {
         status: "skipped",
@@ -1080,45 +1149,10 @@ export function startHeartbeatRunner(opts: {
       } satisfies HeartbeatRunResult;
     }
 
-    const reason = params?.reason;
-    const requestedAgentId = params?.agentId ? normalizeAgentId(params.agentId) : undefined;
-    const requestedSessionKey = params?.sessionKey?.trim() || undefined;
     const isInterval = reason === "interval";
     const startedAt = Date.now();
     const now = startedAt;
     let ran = false;
-
-    if (requestedSessionKey || requestedAgentId) {
-      const targetAgentId = requestedAgentId ?? resolveAgentIdFromSessionKey(requestedSessionKey);
-      const targetAgent = state.agents.get(targetAgentId);
-      if (!targetAgent) {
-        scheduleNext();
-        return { status: "skipped", reason: "disabled" };
-      }
-      try {
-        const res = await runOnce({
-          cfg: state.cfg,
-          agentId: targetAgent.agentId,
-          heartbeat: targetAgent.heartbeat,
-          reason,
-          sessionKey: requestedSessionKey,
-          deps: { runtime: state.runtime },
-        });
-        if (res.status !== "skipped" || res.reason !== "disabled") {
-          advanceAgentSchedule(targetAgent, now);
-        }
-        scheduleNext();
-        return res.status === "ran" ? { status: "ran", durationMs: Date.now() - startedAt } : res;
-      } catch (err) {
-        const errMsg = formatErrorMessage(err);
-        log.error(`heartbeat runner: targeted runOnce threw unexpectedly: ${errMsg}`, {
-          error: errMsg,
-        });
-        advanceAgentSchedule(targetAgent, now);
-        scheduleNext();
-        return { status: "failed", reason: errMsg };
-      }
-    }
 
     for (const agent of state.agents.values()) {
       if (isInterval && now < agent.nextDueMs) {

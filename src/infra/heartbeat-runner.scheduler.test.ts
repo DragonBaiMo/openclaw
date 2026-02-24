@@ -202,4 +202,39 @@ describe("startHeartbeatRunner", () => {
 
     runner.stop();
   });
+
+  it("runs targeted wake even when no periodic heartbeat agents are registered", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(0));
+
+    const runSpy = vi.fn().mockResolvedValue({ status: "ran", durationMs: 1 });
+    const runner = startHeartbeatRunner({
+      cfg: {
+        agents: {
+          list: [{ id: "main" }, { id: "ops", heartbeat: { every: "15m" } }],
+        },
+      } as OpenClawConfig,
+      runOnce: runSpy,
+    });
+
+    // main has no heartbeat config and is not in state.agents; targeted wake should still run.
+    requestHeartbeatNow({
+      reason: "hook:wake",
+      sessionKey: "agent:main:subagent:test",
+      coalesceMs: 0,
+    });
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(runSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: "main",
+        reason: "hook:wake",
+        sessionKey: "agent:main:subagent:test",
+        allowDisabledForWake: true,
+      }),
+    );
+
+    runner.stop();
+  });
 });
