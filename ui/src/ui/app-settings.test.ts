@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setTabFromRoute } from "./app-settings.ts";
+import { hasOperatorReadAccess, setTabFromRoute } from "./app-settings.ts";
 import type { Tab } from "./navigation.ts";
 
 type SettingsHost = Parameters<typeof setTabFromRoute>[0] & {
@@ -67,5 +67,19 @@ describe("setTabFromRoute", () => {
 
     setTabFromRoute(host, "chat");
     expect(host.debugPollInterval).toBeNull();
+  });
+});
+
+describe("hasOperatorReadAccess", () => {
+  it("accepts operator.read/operator.write/operator.admin as read-capable", () => {
+    expect(hasOperatorReadAccess({ role: "operator", scopes: ["operator.read"] })).toBe(true);
+    expect(hasOperatorReadAccess({ role: "operator", scopes: ["operator.write"] })).toBe(true);
+    expect(hasOperatorReadAccess({ role: "operator", scopes: ["operator.admin"] })).toBe(true);
+  });
+
+  it("returns false when read-compatible scope is missing", () => {
+    expect(hasOperatorReadAccess({ role: "operator", scopes: ["operator.pairing"] })).toBe(false);
+    expect(hasOperatorReadAccess({ role: "operator" })).toBe(false);
+    expect(hasOperatorReadAccess(null)).toBe(false);
   });
 });

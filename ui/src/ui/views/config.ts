@@ -359,7 +359,7 @@ const SECTION_CATEGORIES: SectionCategory[] = [
   },
   {
     id: "appearance",
-    label: "Appearance & Setup",
+    label: "Appearance",
     sections: [
       { key: "__appearance__", label: "Appearance" },
       { key: "ui", label: "UI" },

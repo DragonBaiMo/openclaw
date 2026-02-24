@@ -37,7 +37,7 @@ export const en: TranslationMap = {
     chat: "Chat",
     config: "Config",
     communications: "Communications",
-    appearance: "Appearance & Setup",
+    appearance: "Appearance",
     automation: "Automation",
     infrastructure: "Infrastructure",
     aiAgents: "AI & Agents",

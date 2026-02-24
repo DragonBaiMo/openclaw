@@ -833,7 +833,7 @@ select {
 :root[data-theme="dash-light"] .sidebar-brand__title {
   font-family: var(--font-mono);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 :root[data-theme="dash"] .glass-dashboard-card,

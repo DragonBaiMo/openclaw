@@ -116,7 +116,7 @@ type AutomationSectionKey = (typeof AUTOMATION_SECTION_KEYS)[number];
 type InfrastructureSectionKey = (typeof INFRASTRUCTURE_SECTION_KEYS)[number];
 type AiAgentsSectionKey = (typeof AI_AGENTS_SECTION_KEYS)[number];
 
-const NAV_WIDTH_MIN = 180;
+const NAV_WIDTH_MIN = 200;
 const NAV_WIDTH_MAX = 400;
 
 function handleNavResizeStart(e: MouseEvent, state: AppViewState) {
@@ -1380,7 +1380,7 @@ export function renderApp(state: AppViewState) {
                 setThemeMode: (m, ctx) => state.setThemeMode(m, ctx),
                 gatewayUrl: state.settings.gatewayUrl,
                 assistantName: state.assistantName,
-                navRootLabel: "Appearance & Setup",
+                navRootLabel: "Appearance",
                 includeSections: [...APPEARANCE_SECTION_KEYS],
                 includeVirtualSections: true,
               })

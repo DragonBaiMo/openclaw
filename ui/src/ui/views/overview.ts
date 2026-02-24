@@ -190,12 +190,12 @@ export function renderOverview(props: OverviewProps) {
   const currentLocale = i18n.getLocale();
 
   return html`
-    <section class="grid grid-cols-2">
+    <section class="grid">
       <div class="card">
         <div class="card-title">${t("overview.access.title")}</div>
         <div class="card-sub">${t("overview.access.subtitle")}</div>
-        <div class="form-grid ${props.streamMode ? "redacted" : ""}" style="margin-top: 16px;">
-          <label class="field">
+        <div class="ov-access-grid ${props.streamMode ? "redacted" : ""}" style="margin-top: 16px;">
+          <label class="field ov-access-grid__full">
             <span>${t("overview.access.wsUrl")}</span>
             <input
               .value=${props.settings.gatewayUrl}

@@ -1,3 +1,4 @@
+import { roleScopesAllow } from "../../../src/shared/operator-scope-compat.js";
 import { refreshChat } from "./app-chat.ts";
 import {
   startLogsPolling,
@@ -448,6 +449,19 @@ export async function loadOverview(host: SettingsHost) {
   buildAttentionItems(app);
 }
 
+export function hasOperatorReadAccess(
+  auth: { role?: string; scopes?: readonly string[] } | null,
+): boolean {
+  if (!auth?.scopes) {
+    return false;
+  }
+  return roleScopesAllow({
+    role: auth.role ?? "operator",
+    requestedScopes: ["operator.read"],
+    allowedScopes: auth.scopes,
+  });
+}
+
 async function loadOverviewLogs(host: OpenClawApp) {
   if (!host.client || !host.connected) {
     return;
@@ -487,8 +501,8 @@ function buildAttentionItems(host: OpenClawApp) {
   }
 
   const hello = host.hello;
-  const auth = (hello as { auth?: { scopes?: string[] } } | null)?.auth;
-  if (auth?.scopes && !auth.scopes.includes("operator.read")) {
+  const auth = (hello as { auth?: { role?: string; scopes?: string[] } } | null)?.auth ?? null;
+  if (auth?.scopes && !hasOperatorReadAccess(auth)) {
     items.push({
       severity: "warning",
       icon: "key",

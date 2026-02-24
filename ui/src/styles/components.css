@@ -3376,6 +3376,27 @@
 }
 
 /* ===========================================
+   Overview Gateway Access
+   =========================================== */
+
+.ov-access-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ov-access-grid__full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 996px) {
+  .ov-access-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+/* ===========================================
    Overview Dashboard Cards
    =========================================== */
 
