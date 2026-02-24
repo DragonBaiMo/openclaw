@@ -68,6 +68,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "cron.runs",
     "system-presence",
     "last-heartbeat",
+    "last-heartbeat.agent",
     "node.list",
     "node.describe",
     "chat.history",

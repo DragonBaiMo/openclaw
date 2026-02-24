@@ -1,5 +1,6 @@
 import type { GatewayBrowserClient } from "../gateway.ts";
 import type {
+  AgentHeartbeatStatus,
   AgentFileEntry,
   AgentsFilesGetResult,
   AgentsFilesListResult,
@@ -16,6 +17,9 @@ export type AgentFilesState = {
   agentFileDrafts: Record<string, string>;
   agentFileActive: string | null;
   agentFileSaving: boolean;
+  agentHeartbeatLoading: boolean;
+  agentHeartbeatError: string | null;
+  agentHeartbeatById: Record<string, AgentHeartbeatStatus | null>;
 };
 
 function mergeFileEntry(
@@ -64,7 +68,7 @@ export async function loadAgentFileContent(
   if (!state.client || !state.connected || state.agentFilesLoading) {
     return;
   }
-  if (!opts?.force && Object.hasOwn(state.agentFileContents, name)) {
+  if (!opts?.force && Object.prototype.hasOwnProperty.call(state.agentFileContents, name)) {
     return;
   }
   state.agentFilesLoading = true;
@@ -83,7 +87,7 @@ export async function loadAgentFileContent(
       state.agentFileContents = { ...state.agentFileContents, [name]: content };
       if (
         !preserveDraft ||
-        !Object.hasOwn(state.agentFileDrafts, name) ||
+        !Object.prototype.hasOwnProperty.call(state.agentFileDrafts, name) ||
         currentDraft === previousBase
       ) {
         state.agentFileDrafts = { ...state.agentFileDrafts, [name]: content };
@@ -122,5 +126,23 @@ export async function saveAgentFile(
     state.agentFilesError = String(err);
   } finally {
     state.agentFileSaving = false;
+  }
+}
+
+export async function loadAgentHeartbeatStatus(state: AgentFilesState, agentId: string) {
+  if (!state.client || !state.connected || state.agentHeartbeatLoading) {
+    return;
+  }
+  state.agentHeartbeatLoading = true;
+  state.agentHeartbeatError = null;
+  try {
+    const res = await state.client.request<AgentHeartbeatStatus | null>("last-heartbeat.agent", {
+      agentId,
+    });
+    state.agentHeartbeatById = { ...state.agentHeartbeatById, [agentId]: res ?? null };
+  } catch (err) {
+    state.agentHeartbeatError = String(err);
+  } finally {
+    state.agentHeartbeatLoading = false;
   }
 }

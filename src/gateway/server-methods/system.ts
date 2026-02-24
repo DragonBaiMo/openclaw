@@ -1,8 +1,12 @@
 import { resolveMainSessionKeyFromConfig } from "../../config/sessions.js";
-import { getLastHeartbeatEvent } from "../../infra/heartbeat-events.js";
+import {
+  getLastHeartbeatEvent,
+  getLastHeartbeatEventForAgent,
+} from "../../infra/heartbeat-events.js";
 import { setHeartbeatsEnabled } from "../../infra/heartbeat-runner.js";
 import { enqueueSystemEvent, isSystemEventContextChanged } from "../../infra/system-events.js";
 import { listSystemPresence, updateSystemPresence } from "../../infra/system-presence.js";
+import { normalizeAgentId } from "../../routing/session-key.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 import { broadcastPresenceSnapshot } from "../server/presence-events.js";
 import type { GatewayRequestHandlers } from "./types.js";
@@ -10,6 +14,25 @@ import type { GatewayRequestHandlers } from "./types.js";
 export const systemHandlers: GatewayRequestHandlers = {
   "last-heartbeat": ({ respond }) => {
     respond(true, getLastHeartbeatEvent(), undefined);
+  },
+  "last-heartbeat.agent": ({ params, respond }) => {
+    const rawAgentId =
+      typeof params.agentId === "string" || typeof params.agentId === "number"
+        ? String(params.agentId)
+        : "";
+    const agentId = normalizeAgentId(rawAgentId);
+    if (!agentId) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          "invalid last-heartbeat.agent params: agentId (string) required",
+        ),
+      );
+      return;
+    }
+    respond(true, getLastHeartbeatEventForAgent(agentId), undefined);
   },
   "set-heartbeats": ({ params, respond }) => {
     const enabled = params.enabled;

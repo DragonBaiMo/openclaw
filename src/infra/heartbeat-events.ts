@@ -2,6 +2,7 @@ export type HeartbeatIndicatorType = "ok" | "alert" | "error";
 
 export type HeartbeatEventPayload = {
   ts: number;
+  agentId?: string;
   status: "sent" | "ok-empty" | "ok-token" | "skipped" | "failed";
   to?: string;
   accountId?: string;
@@ -34,11 +35,19 @@ export function resolveIndicatorType(
 }
 
 let lastHeartbeat: HeartbeatEventPayload | null = null;
+const lastHeartbeatByAgent = new Map<string, HeartbeatEventPayload>();
 const listeners = new Set<(evt: HeartbeatEventPayload) => void>();
+
+function normalizeAgentId(value: string): string {
+  return value.trim().toLowerCase();
+}
 
 export function emitHeartbeatEvent(evt: Omit<HeartbeatEventPayload, "ts">) {
   const enriched: HeartbeatEventPayload = { ts: Date.now(), ...evt };
   lastHeartbeat = enriched;
+  if (typeof enriched.agentId === "string" && enriched.agentId.trim()) {
+    lastHeartbeatByAgent.set(normalizeAgentId(enriched.agentId), enriched);
+  }
   for (const listener of listeners) {
     try {
       listener(enriched);
@@ -55,4 +64,9 @@ export function onHeartbeatEvent(listener: (evt: HeartbeatEventPayload) => void)
 
 export function getLastHeartbeatEvent(): HeartbeatEventPayload | null {
   return lastHeartbeat;
+}
+
+export function getLastHeartbeatEventForAgent(agentId: string): HeartbeatEventPayload | null {
+  const normalized = normalizeAgentId(agentId);
+  return lastHeartbeatByAgent.get(normalized) ?? null;
 }

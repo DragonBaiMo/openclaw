@@ -97,6 +97,15 @@ type FileMeta = {
   updatedAtMs: number;
 };
 
+type AgentFileSourceScope = "shared" | "agent-override";
+
+type AgentFileSources = {
+  sharedPath: string;
+  sharedMeta: FileMeta | null;
+  overridePath: string;
+  overrideMeta: FileMeta | null;
+};
+
 async function statFile(filePath: string): Promise<FileMeta | null> {
   try {
     const stat = await fs.stat(filePath);
@@ -112,7 +121,60 @@ async function statFile(filePath: string): Promise<FileMeta | null> {
   }
 }
 
-async function listAgentFiles(workspaceDir: string, options?: { hideBootstrap?: boolean }) {
+function resolveAgentOverrideFilePath(workspaceDir: string, agentId: string, name: string): string {
+  return path.join(workspaceDir, ".agents", agentId, name);
+}
+
+async function resolveAgentFileSources(params: {
+  workspaceDir: string;
+  agentId: string;
+  name: string;
+}): Promise<AgentFileSources> {
+  const sharedPath = path.join(params.workspaceDir, params.name);
+  const overridePath = resolveAgentOverrideFilePath(
+    params.workspaceDir,
+    params.agentId,
+    params.name,
+  );
+  const [sharedMeta, overrideMeta] = await Promise.all([
+    statFile(sharedPath),
+    statFile(overridePath),
+  ]);
+  return { sharedPath, sharedMeta, overridePath, overrideMeta };
+}
+
+function buildAgentFileEntry(params: { name: string; sources: AgentFileSources }) {
+  const { name, sources } = params;
+  const effectiveMeta = sources.overrideMeta ?? sources.sharedMeta;
+  const sourceScope: AgentFileSourceScope | undefined = sources.overrideMeta
+    ? "agent-override"
+    : sources.sharedMeta
+      ? "shared"
+      : undefined;
+  const effectivePath = sources.overrideMeta ? sources.overridePath : sources.sharedPath;
+  return {
+    name,
+    path: effectivePath,
+    missing: !effectiveMeta,
+    size: effectiveMeta?.size,
+    updatedAtMs: effectiveMeta?.updatedAtMs,
+    sourceScope,
+    sharedPath: sources.sharedPath,
+    sharedMissing: !sources.sharedMeta,
+    sharedSize: sources.sharedMeta?.size,
+    sharedUpdatedAtMs: sources.sharedMeta?.updatedAtMs,
+    overridePath: sources.overridePath,
+    overrideMissing: !sources.overrideMeta,
+    overrideSize: sources.overrideMeta?.size,
+    overrideUpdatedAtMs: sources.overrideMeta?.updatedAtMs,
+  };
+}
+
+async function listAgentFiles(
+  workspaceDir: string,
+  agentId: string,
+  options?: { hideBootstrap?: boolean },
+) {
   const files: Array<{
     name: string;
     path: string;
@@ -125,48 +187,41 @@ async function listAgentFiles(workspaceDir: string, options?: { hideBootstrap?: 
     ? BOOTSTRAP_FILE_NAMES_POST_ONBOARDING
     : BOOTSTRAP_FILE_NAMES;
   for (const name of bootstrapFileNames) {
-    const filePath = path.join(workspaceDir, name);
-    const meta = await statFile(filePath);
-    if (meta) {
-      files.push({
-        name,
-        path: filePath,
-        missing: false,
-        size: meta.size,
-        updatedAtMs: meta.updatedAtMs,
-      });
-    } else {
-      files.push({ name, path: filePath, missing: true });
-    }
+    const sources = await resolveAgentFileSources({ workspaceDir, agentId, name });
+    files.push(buildAgentFileEntry({ name, sources }));
   }
 
-  const primaryMemoryPath = path.join(workspaceDir, DEFAULT_MEMORY_FILENAME);
-  const primaryMeta = await statFile(primaryMemoryPath);
-  if (primaryMeta) {
-    files.push({
-      name: DEFAULT_MEMORY_FILENAME,
-      path: primaryMemoryPath,
-      missing: false,
-      size: primaryMeta.size,
-      updatedAtMs: primaryMeta.updatedAtMs,
-    });
+  const primarySources = await resolveAgentFileSources({
+    workspaceDir,
+    agentId,
+    name: DEFAULT_MEMORY_FILENAME,
+  });
+  if (primarySources.overrideMeta || primarySources.sharedMeta) {
+    files.push(buildAgentFileEntry({ name: DEFAULT_MEMORY_FILENAME, sources: primarySources }));
   } else {
-    const altMemoryPath = path.join(workspaceDir, DEFAULT_MEMORY_ALT_FILENAME);
-    const altMeta = await statFile(altMemoryPath);
-    if (altMeta) {
-      files.push({
-        name: DEFAULT_MEMORY_ALT_FILENAME,
-        path: altMemoryPath,
-        missing: false,
-        size: altMeta.size,
-        updatedAtMs: altMeta.updatedAtMs,
-      });
+    const altSources = await resolveAgentFileSources({
+      workspaceDir,
+      agentId,
+      name: DEFAULT_MEMORY_ALT_FILENAME,
+    });
+    if (altSources.overrideMeta || altSources.sharedMeta) {
+      files.push(buildAgentFileEntry({ name: DEFAULT_MEMORY_ALT_FILENAME, sources: altSources }));
     } else {
-      files.push({ name: DEFAULT_MEMORY_FILENAME, path: primaryMemoryPath, missing: true });
+      files.push(buildAgentFileEntry({ name: DEFAULT_MEMORY_FILENAME, sources: primarySources }));
     }
   }
 
   return files;
+}
+
+async function resolveEffectiveAgentWorkspaceFile(params: {
+  workspaceDir: string;
+  agentId: string;
+  name: string;
+}) {
+  const sources = await resolveAgentFileSources(params);
+  const effectivePath = sources.overrideMeta ? sources.overridePath : sources.sharedPath;
+  return { sources, effectivePath };
 }
 
 function resolveAgentIdOrError(agentIdRaw: string, cfg: ReturnType<typeof loadConfig>) {
@@ -430,7 +485,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
     } catch {
       // Fall back to showing BOOTSTRAP if workspace state cannot be read.
     }
-    const files = await listAgentFiles(workspaceDir, { hideBootstrap });
+    const files = await listAgentFiles(workspaceDir, agentId, { hideBootstrap });
     respond(true, { agentId, workspace: workspaceDir, files }, undefined);
   },
   "agents.files.get": async ({ params, respond }) => {
@@ -452,34 +507,31 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
     const { agentId, workspaceDir, name } = resolved;
-    const filePath = path.join(workspaceDir, name);
-    const meta = await statFile(filePath);
-    if (!meta) {
+    const { sources, effectivePath } = await resolveEffectiveAgentWorkspaceFile({
+      workspaceDir,
+      agentId,
+      name,
+    });
+    const fileEntry = buildAgentFileEntry({ name, sources });
+    if (fileEntry.missing) {
       respond(
         true,
         {
           agentId,
           workspace: workspaceDir,
-          file: { name, path: filePath, missing: true },
+          file: fileEntry,
         },
         undefined,
       );
       return;
     }
-    const content = await fs.readFile(filePath, "utf-8");
+    const content = await fs.readFile(effectivePath, "utf-8");
     respond(
       true,
       {
         agentId,
         workspace: workspaceDir,
-        file: {
-          name,
-          path: filePath,
-          missing: false,
-          size: meta.size,
-          updatedAtMs: meta.updatedAtMs,
-          content,
-        },
+        file: { ...fileEntry, content },
       },
       undefined,
     );
@@ -503,25 +555,23 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
     const { agentId, workspaceDir, name } = resolved;
-    await fs.mkdir(workspaceDir, { recursive: true });
-    const filePath = path.join(workspaceDir, name);
+    const { effectivePath } = await resolveEffectiveAgentWorkspaceFile({
+      workspaceDir,
+      agentId,
+      name,
+    });
+    await fs.mkdir(path.dirname(effectivePath), { recursive: true });
     const content = String(params.content ?? "");
-    await fs.writeFile(filePath, content, "utf-8");
-    const meta = await statFile(filePath);
+    await fs.writeFile(effectivePath, content, "utf-8");
+    const refreshedSources = await resolveAgentFileSources({ workspaceDir, agentId, name });
+    const fileEntry = buildAgentFileEntry({ name, sources: refreshedSources });
     respond(
       true,
       {
         ok: true,
         agentId,
         workspace: workspaceDir,
-        file: {
-          name,
-          path: filePath,
-          missing: false,
-          size: meta?.size,
-          updatedAtMs: meta?.updatedAtMs,
-          content,
-        },
+        file: { ...fileEntry, content },
       },
       undefined,
     );

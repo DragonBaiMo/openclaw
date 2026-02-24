@@ -63,6 +63,7 @@ import type { Tab } from "./navigation.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import type { ResolvedTheme, ThemeMode } from "./theme.ts";
 import type {
+  AgentHeartbeatStatus,
   AgentsListResult,
   AgentsFilesListResult,
   AgentIdentityResult,
@@ -234,6 +235,9 @@ export class OpenClawApp extends LitElement {
   @state() agentFileDrafts: Record<string, string> = {};
   @state() agentFileActive: string | null = null;
   @state() agentFileSaving = false;
+  @state() agentHeartbeatLoading = false;
+  @state() agentHeartbeatError: string | null = null;
+  @state() agentHeartbeatById: Record<string, AgentHeartbeatStatus | null> = {};
   @state() agentIdentityLoading = false;
   @state() agentIdentityError: string | null = null;
   @state() agentIdentityById: Record<string, AgentIdentityResult> = {};

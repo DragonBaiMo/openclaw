@@ -123,6 +123,38 @@ describe("gateway server health/presence", () => {
     ws.close();
   });
 
+  test("serves last-heartbeat.agent by agentId", async () => {
+    const { ws } = await harness.openClient();
+
+    emitHeartbeatEvent({
+      agentId: "ops",
+      status: "sent",
+      to: "+1888",
+      preview: "ops-heartbeat",
+    });
+
+    ws.send(
+      JSON.stringify({
+        type: "req",
+        id: "hb-agent",
+        method: "last-heartbeat.agent",
+        params: { agentId: "ops" },
+      }),
+    );
+
+    const res = await onceMessage<GatewayFrame>(ws, (o) => o.type === "res" && o.id === "hb-agent");
+    expect(res.ok).toBe(true);
+    const payload = res.payload as
+      | { status?: string; to?: string; preview?: string; agentId?: string }
+      | null
+      | undefined;
+    expect(payload?.status).toBe("sent");
+    expect(payload?.agentId).toBe("ops");
+    expect(payload?.to).toBe("+1888");
+
+    ws.close();
+  });
+
   test(
     "presence events carry seq + stateVersion",
     { timeout: PRESENCE_EVENT_TIMEOUT_MS },

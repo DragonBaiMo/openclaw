@@ -153,6 +153,9 @@ export type AppViewState = {
   agentFileDrafts: Record<string, string>;
   agentFileActive: string | null;
   agentFileSaving: boolean;
+  agentHeartbeatLoading: boolean;
+  agentHeartbeatError: string | null;
+  agentHeartbeatById: Record<string, import("./types.ts").AgentHeartbeatStatus | null>;
   agentIdentityLoading: boolean;
   agentIdentityError: string | null;
   agentIdentityById: Record<string, AgentIdentityResult>;

@@ -1,5 +1,6 @@
 import { html, nothing } from "lit";
 import type {
+  AgentHeartbeatStatus,
   AgentIdentityResult,
   AgentsFilesListResult,
   AgentsListResult,
@@ -56,6 +57,9 @@ export type AgentsProps = {
   agentFileContents: Record<string, string>;
   agentFileDrafts: Record<string, string>;
   agentFileSaving: boolean;
+  agentHeartbeatLoading: boolean;
+  agentHeartbeatError: string | null;
+  agentHeartbeatById: Record<string, AgentHeartbeatStatus | null>;
   agentIdentityLoading: boolean;
   agentIdentityError: string | null;
   agentIdentityById: Record<string, AgentIdentityResult>;
@@ -71,6 +75,7 @@ export type AgentsProps = {
   onSelectAgent: (agentId: string) => void;
   onSelectPanel: (panel: AgentsPanel) => void;
   onLoadFiles: (agentId: string) => void;
+  onLoadHeartbeatStatus: (agentId: string) => void;
   onSelectFile: (name: string) => void;
   onFileDraftChange: (name: string, content: string) => void;
   onFileReset: (name: string) => void;
@@ -198,7 +203,11 @@ export function renderAgents(props: AgentsProps) {
                         agentFileContents: props.agentFileContents,
                         agentFileDrafts: props.agentFileDrafts,
                         agentFileSaving: props.agentFileSaving,
+                        agentHeartbeatLoading: props.agentHeartbeatLoading,
+                        agentHeartbeatError: props.agentHeartbeatError,
+                        agentHeartbeatStatus: props.agentHeartbeatById[selectedAgent.id] ?? null,
                         onLoadFiles: props.onLoadFiles,
+                        onLoadHeartbeatStatus: props.onLoadHeartbeatStatus,
                         onSelectFile: props.onSelectFile,
                         onFileDraftChange: props.onFileDraftChange,
                         onFileReset: props.onFileReset,

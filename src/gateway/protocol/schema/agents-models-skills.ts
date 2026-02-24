@@ -108,6 +108,20 @@ export const AgentsFileEntrySchema = Type.Object(
     size: Type.Optional(Type.Integer({ minimum: 0 })),
     updatedAtMs: Type.Optional(Type.Integer({ minimum: 0 })),
     content: Type.Optional(Type.String()),
+    sourceScope: Type.Optional(
+      Type.Unsafe<"shared" | "agent-override">({
+        type: "string",
+        enum: ["shared", "agent-override"],
+      }),
+    ),
+    sharedPath: Type.Optional(NonEmptyString),
+    sharedMissing: Type.Optional(Type.Boolean()),
+    sharedSize: Type.Optional(Type.Integer({ minimum: 0 })),
+    sharedUpdatedAtMs: Type.Optional(Type.Integer({ minimum: 0 })),
+    overridePath: Type.Optional(NonEmptyString),
+    overrideMissing: Type.Optional(Type.Boolean()),
+    overrideSize: Type.Optional(Type.Integer({ minimum: 0 })),
+    overrideUpdatedAtMs: Type.Optional(Type.Integer({ minimum: 0 })),
   },
   { additionalProperties: false },
 );

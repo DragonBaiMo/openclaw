@@ -7,6 +7,7 @@ import {
   formatNextRun,
 } from "../presenter.ts";
 import type {
+  AgentHeartbeatStatus,
   AgentFileEntry,
   AgentsFilesListResult,
   ChannelAccountSnapshot,
@@ -361,7 +362,11 @@ export function renderAgentFiles(params: {
   agentFileContents: Record<string, string>;
   agentFileDrafts: Record<string, string>;
   agentFileSaving: boolean;
+  agentHeartbeatLoading: boolean;
+  agentHeartbeatError: string | null;
+  agentHeartbeatStatus: AgentHeartbeatStatus | null;
   onLoadFiles: (agentId: string) => void;
+  onLoadHeartbeatStatus: (agentId: string) => void;
   onSelectFile: (name: string) => void;
   onFileDraftChange: (name: string, content: string) => void;
   onFileReset: (name: string) => void;
@@ -382,13 +387,22 @@ export function renderAgentFiles(params: {
           <div class="card-title">Core Files</div>
           <div class="card-sub">Bootstrap persona, identity, and tool guidance.</div>
         </div>
-        <button
-          class="btn btn--sm"
-          ?disabled=${params.agentFilesLoading}
-          @click=${() => params.onLoadFiles(params.agentId)}
-        >
-          ${params.agentFilesLoading ? "Loading…" : "Refresh"}
-        </button>
+        <div class="row" style="gap: 8px;">
+          <button
+            class="btn btn--sm"
+            ?disabled=${params.agentHeartbeatLoading}
+            @click=${() => params.onLoadHeartbeatStatus(params.agentId)}
+          >
+            ${params.agentHeartbeatLoading ? "Heartbeat…" : "Heartbeat"}
+          </button>
+          <button
+            class="btn btn--sm"
+            ?disabled=${params.agentFilesLoading}
+            @click=${() => params.onLoadFiles(params.agentId)}
+          >
+            ${params.agentFilesLoading ? "Loading…" : "Refresh"}
+          </button>
+        </div>
       </div>
       ${
         list
@@ -400,6 +414,7 @@ export function renderAgentFiles(params: {
           ? html`<div class="callout danger" style="margin-top: 12px;">${params.agentFilesError}</div>`
           : nothing
       }
+      ${renderAgentHeartbeatStatus(params.agentHeartbeatStatus, params.agentHeartbeatError)}
       ${
         !list
           ? html`
@@ -453,7 +468,17 @@ export function renderAgentFiles(params: {
                             activeEntry.missing
                               ? html`
                                   <div class="callout info" style="margin-top: 10px">
-                                    This file is missing. Saving will create it in the agent workspace.
+                                    This file is missing. Saving will create it in the active source path.
+                                  </div>
+                                `
+                              : nothing
+                          }
+                          ${
+                            activeEntry.sourceScope === "agent-override"
+                              ? html`
+                                  <div class="callout info" style="margin-top: 10px">
+                                    Editing agent override file:
+                                    <span class="mono">${activeEntry.path}</span>
                                   </div>
                                 `
                               : nothing
@@ -483,6 +508,13 @@ function renderAgentFileRow(file: AgentFileEntry, active: string | null, onSelec
   const status = file.missing
     ? "Missing"
     : `${formatBytes(file.size)} · ${formatRelativeTimestamp(file.updatedAtMs ?? null)}`;
+  const sourceLabel =
+    file.sourceScope === "agent-override"
+      ? "agent override"
+      : file.sourceScope === "shared"
+        ? "workspace shared"
+        : "unresolved";
+  const sourceClass = file.sourceScope === "agent-override" ? "chip-ok" : "";
   return html`
     <button
       type="button"
@@ -492,14 +524,40 @@ function renderAgentFileRow(file: AgentFileEntry, active: string | null, onSelec
       <div>
         <div class="agent-file-name mono">${file.name}</div>
         <div class="agent-file-meta">${status}</div>
+        <div class="agent-file-meta">source: ${sourceLabel}</div>
       </div>
-      ${
-        file.missing
-          ? html`
-              <span class="agent-pill warn">missing</span>
-            `
-          : nothing
-      }
+      <div class="chip-row" style="justify-content: flex-end;">
+        ${
+          file.sourceScope ? html`<span class="chip ${sourceClass}">${sourceLabel}</span>` : nothing
+        }
+        ${
+          file.missing
+            ? html`
+                <span class="agent-pill warn">missing</span>
+              `
+            : nothing
+        }
+      </div>
     </button>
+  `;
+}
+
+function renderAgentHeartbeatStatus(status: AgentHeartbeatStatus | null, error: string | null) {
+  if (error) {
+    return html`<div class="callout danger" style="margin-top: 12px;">${error}</div>`;
+  }
+  if (!status) {
+    return html`
+      <div class="callout info" style="margin-top: 12px">No heartbeat event yet for this agent.</div>
+    `;
+  }
+  return html`
+    <div class="callout info" style="margin-top: 12px;">
+      <div><strong>Heartbeat status:</strong> ${status.status}</div>
+      <div class="mono" style="margin-top: 4px;">last: ${formatRelativeTimestamp(status.ts)}</div>
+      <div class="mono">channel: ${status.channel ?? "n/a"} · to: ${status.to ?? "n/a"}</div>
+      <div class="mono">reason: ${status.reason ?? "n/a"} · duration: ${status.durationMs ?? 0}ms</div>
+      ${status.preview ? html`<div style="margin-top: 4px;">preview: ${status.preview}</div>` : nothing}
+    </div>
   `;
 }

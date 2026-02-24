@@ -388,6 +388,30 @@ export type AgentFileEntry = {
   size?: number;
   updatedAtMs?: number;
   content?: string;
+  sourceScope?: "shared" | "agent-override";
+  sharedPath?: string;
+  sharedMissing?: boolean;
+  sharedSize?: number;
+  sharedUpdatedAtMs?: number;
+  overridePath?: string;
+  overrideMissing?: boolean;
+  overrideSize?: number;
+  overrideUpdatedAtMs?: number;
+};
+
+export type AgentHeartbeatStatus = {
+  ts: number;
+  agentId?: string;
+  status: "sent" | "ok-empty" | "ok-token" | "skipped" | "failed";
+  to?: string;
+  accountId?: string;
+  preview?: string;
+  durationMs?: number;
+  hasMedia?: boolean;
+  reason?: string;
+  channel?: string;
+  silent?: boolean;
+  indicatorType?: "ok" | "alert" | "error";
 };
 
 export type AgentsFilesListResult = {

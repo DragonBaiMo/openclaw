@@ -458,4 +458,42 @@ describe("agents.files.list", () => {
     const names = await listAgentFileNames();
     expect(names).toContain("BOOTSTRAP.md");
   });
+
+  it("prefers .agents/<agentId>/ overrides and reports shared/override metadata", async () => {
+    mocks.loadConfigReturn = {};
+
+    mocks.fsStat.mockImplementation(async (pathLike: unknown) => {
+      const filePath = typeof pathLike === "string" ? pathLike : "";
+      if (filePath.includes("/.agents/main/HEARTBEAT.md")) {
+        return {
+          isFile: () => true,
+          size: 88,
+          mtimeMs: 2000,
+        } as unknown as null;
+      }
+      if (filePath.endsWith("/HEARTBEAT.md")) {
+        return {
+          isFile: () => true,
+          size: 44,
+          mtimeMs: 1000,
+        } as unknown as null;
+      }
+      throw createEnoentError();
+    });
+
+    const { respond, promise } = makeCall("agents.files.list", { agentId: "main" });
+    await promise;
+
+    const call = respond.mock.calls[0];
+    expect(call?.[0]).toBe(true);
+    const payload = call?.[1] as { files: Array<Record<string, unknown>> };
+    expect(payload).toBeDefined();
+    const heartbeat = payload.files.find((file) => file.name === "HEARTBEAT.md");
+    expect(heartbeat).toBeDefined();
+    expect(heartbeat?.sourceScope).toBe("agent-override");
+    expect(heartbeat?.overrideMissing).toBe(false);
+    expect(heartbeat?.sharedMissing).toBe(false);
+    expect(String(heartbeat?.path)).toContain("/.agents/main/HEARTBEAT.md");
+    expect(String(heartbeat?.sharedPath)).toContain("/HEARTBEAT.md");
+  });
 });

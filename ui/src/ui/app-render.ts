@@ -5,7 +5,12 @@ import { refreshChatAvatar } from "./app-chat.ts";
 import { renderUsageTab } from "./app-render-usage-tab.ts";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
 import type { AppViewState } from "./app-view-state.ts";
-import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.ts";
+import {
+  loadAgentFileContent,
+  loadAgentFiles,
+  loadAgentHeartbeatStatus,
+  saveAgentFile,
+} from "./controllers/agent-files.ts";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
 import { loadAgents, loadToolsCatalog } from "./controllers/agents.ts";
@@ -537,6 +542,9 @@ export function renderApp(state: AppViewState) {
                 agentFileContents: state.agentFileContents,
                 agentFileDrafts: state.agentFileDrafts,
                 agentFileSaving: state.agentFileSaving,
+                agentHeartbeatLoading: state.agentHeartbeatLoading,
+                agentHeartbeatError: state.agentHeartbeatError,
+                agentHeartbeatById: state.agentHeartbeatById,
                 agentIdentityLoading: state.agentIdentityLoading,
                 agentIdentityError: state.agentIdentityError,
                 agentIdentityById: state.agentIdentityById,
@@ -581,6 +589,7 @@ export function renderApp(state: AppViewState) {
                   }
                   if (state.agentsPanel === "files") {
                     void loadAgentFiles(state, agentId);
+                    void loadAgentHeartbeatStatus(state, agentId);
                   }
                   if (state.agentsPanel === "skills") {
                     void loadAgentSkills(state, agentId);
@@ -597,6 +606,7 @@ export function renderApp(state: AppViewState) {
                       state.agentFileDrafts = {};
                       void loadAgentFiles(state, resolvedAgentId);
                     }
+                    void loadAgentHeartbeatStatus(state, resolvedAgentId);
                   }
                   if (panel === "tools") {
                     void loadToolsCatalog(state, resolvedAgentId);
@@ -614,6 +624,8 @@ export function renderApp(state: AppViewState) {
                   }
                 },
                 onLoadFiles: (agentId) => loadAgentFiles(state, agentId),
+                onLoadHeartbeatStatus: (agentId: string) =>
+                  loadAgentHeartbeatStatus(state, agentId),
                 onSelectFile: (name) => {
                   state.agentFileActive = name;
                   if (!resolvedAgentId) {

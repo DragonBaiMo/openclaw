@@ -641,6 +641,7 @@ export async function runHeartbeatOnce(opts: {
   });
   if (preflight.skipReason) {
     emitHeartbeatEvent({
+      agentId,
       status: "skipped",
       reason: preflight.skipReason,
       durationMs: Date.now() - startedAt,
@@ -718,6 +719,7 @@ export async function runHeartbeatOnce(opts: {
   };
   if (!visibility.showAlerts && !visibility.showOk && !visibility.useIndicator) {
     emitHeartbeatEvent({
+      agentId,
       status: "skipped",
       reason: "alerts-disabled",
       durationMs: Date.now() - startedAt,
@@ -792,6 +794,7 @@ export async function runHeartbeatOnce(opts: {
       await pruneHeartbeatTranscript(transcriptState);
       const okSent = await maybeSendHeartbeatOk();
       emitHeartbeatEvent({
+        agentId,
         status: "ok-empty",
         reason: opts.reason,
         durationMs: Date.now() - startedAt,
@@ -828,6 +831,7 @@ export async function runHeartbeatOnce(opts: {
       await pruneHeartbeatTranscript(transcriptState);
       const okSent = await maybeSendHeartbeatOk();
       emitHeartbeatEvent({
+        agentId,
         status: "ok-token",
         reason: opts.reason,
         durationMs: Date.now() - startedAt,
@@ -865,6 +869,7 @@ export async function runHeartbeatOnce(opts: {
       // Prune the transcript to remove duplicate heartbeat turns
       await pruneHeartbeatTranscript(transcriptState);
       emitHeartbeatEvent({
+        agentId,
         status: "skipped",
         reason: "duplicate",
         preview: normalized.text.slice(0, 200),
@@ -886,6 +891,7 @@ export async function runHeartbeatOnce(opts: {
 
     if (delivery.channel === "none" || !delivery.to) {
       emitHeartbeatEvent({
+        agentId,
         status: "skipped",
         reason: delivery.reason ?? "no-target",
         preview: previewText?.slice(0, 200),
@@ -903,6 +909,7 @@ export async function runHeartbeatOnce(opts: {
         updatedAt: previousUpdatedAt,
       });
       emitHeartbeatEvent({
+        agentId,
         status: "skipped",
         reason: "alerts-disabled",
         preview: previewText?.slice(0, 200),
@@ -925,6 +932,7 @@ export async function runHeartbeatOnce(opts: {
       });
       if (!readiness.ok) {
         emitHeartbeatEvent({
+          agentId,
           status: "skipped",
           reason: readiness.reason,
           preview: previewText?.slice(0, 200),
@@ -977,6 +985,7 @@ export async function runHeartbeatOnce(opts: {
     }
 
     emitHeartbeatEvent({
+      agentId,
       status: "sent",
       to: delivery.to,
       preview: previewText?.slice(0, 200),
@@ -990,6 +999,7 @@ export async function runHeartbeatOnce(opts: {
   } catch (err) {
     const reason = formatErrorMessage(err);
     emitHeartbeatEvent({
+      agentId,
       status: "failed",
       reason,
       durationMs: Date.now() - startedAt,
