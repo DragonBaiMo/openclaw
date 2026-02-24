@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { SsrFBlockedError } from "../infra/net/ssrf.js";
 import { rawDataToString } from "../infra/ws.js";
+import { mockPinnedHostnameResolution } from "../test-helpers/ssrf.js";
 import { createTargetViaCdp, evaluateJavaScript, normalizeCdpWsUrl, snapshotAria } from "./cdp.js";
 import { InvalidBrowserNavigationUrlError } from "./navigation-guard.js";
 
@@ -54,6 +55,7 @@ describe("cdp", () => {
   };
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await new Promise<void>((resolve) => {
       if (!httpServer) {
         return resolve();
@@ -71,6 +73,7 @@ describe("cdp", () => {
   });
 
   it("creates a target via the browser websocket", async () => {
+    mockPinnedHostnameResolution();
     const wsPort = await startWsServerWithMessages((msg, socket) => {
       if (msg.method !== "Target.createTarget") {
         return;
@@ -90,6 +93,7 @@ describe("cdp", () => {
     const created = await createTargetViaCdp({
       cdpUrl: `http://127.0.0.1:${httpPort}`,
       url: "https://example.com",
+      ssrfPolicy: { allowPrivateNetwork: true },
     });
 
     expect(created.targetId).toBe("TARGET_123");
@@ -179,6 +183,7 @@ describe("cdp", () => {
   });
 
   it("fails when /json/version omits webSocketDebuggerUrl", async () => {
+    mockPinnedHostnameResolution();
     const httpPort = await startVersionHttpServer({});
     await expect(
       createTargetViaCdp({

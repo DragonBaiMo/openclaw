@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { mockPinnedHostnameResolution } from "../test-helpers/ssrf.js";
 import { InvalidBrowserNavigationUrlError } from "./navigation-guard.js";
 import {
   getPwToolsCoreSessionMocks,
@@ -29,6 +30,7 @@ describe("pw-tools-core.snapshot navigate guard", () => {
   });
 
   it("navigates valid network URLs with clamped timeout", async () => {
+    mockPinnedHostnameResolution();
     const goto = vi.fn(async () => {});
     setPwToolsCoreCurrentPage({
       goto,

@@ -27,6 +27,18 @@ function applyEnvValues(env: Record<string, string | undefined>): void {
   }
 }
 
+const TEST_ISOLATION_ENV_KEYS = [
+  "OPENCLAW_HOME",
+  "OPENCLAW_STATE_DIR",
+  "OPENCLAW_CONFIG_PATH",
+] as const;
+
+function clearTestIsolationEnvOverrides(): void {
+  for (const key of TEST_ISOLATION_ENV_KEYS) {
+    delete process.env[key];
+  }
+}
+
 export function captureFullEnv() {
   const snapshot: Record<string, string | undefined> = { ...process.env };
 
@@ -49,8 +61,9 @@ export function captureFullEnv() {
 }
 
 export function withEnv<T>(env: Record<string, string | undefined>, fn: () => T): T {
-  const snapshot = captureEnv(Object.keys(env));
+  const snapshot = captureEnv([...Object.keys(env), ...TEST_ISOLATION_ENV_KEYS]);
   try {
+    clearTestIsolationEnvOverrides();
     applyEnvValues(env);
     return fn();
   } finally {
@@ -62,8 +75,9 @@ export async function withEnvAsync<T>(
   env: Record<string, string | undefined>,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const snapshot = captureEnv(Object.keys(env));
+  const snapshot = captureEnv([...Object.keys(env), ...TEST_ISOLATION_ENV_KEYS]);
   try {
+    clearTestIsolationEnvOverrides();
     applyEnvValues(env);
     return await fn();
   } finally {

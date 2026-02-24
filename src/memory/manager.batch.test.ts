@@ -4,9 +4,10 @@ import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useFastShortTimeouts } from "../../test/helpers/fast-short-timeouts.js";
 import type { OpenClawConfig } from "../config/config.js";
+import { mockPinnedHostnameResolution } from "../test-helpers/ssrf.js";
 import { getMemorySearchManager, type MemoryIndexManager } from "./index.js";
-import { createOpenAIEmbeddingProviderMock } from "./test-embeddings-mock.js";
 import "./test-runtime-mocks.js";
+import { createOpenAIEmbeddingProviderMock } from "./test-embeddings-mock.js";
 
 const embedBatch = vi.fn(async (_texts: string[]) => [] as number[][]);
 const embedQuery = vi.fn(async () => [0.5, 0.5, 0.5]);
@@ -140,6 +141,7 @@ describe("memory indexing with OpenAI batches", () => {
   });
 
   beforeEach(async () => {
+    mockPinnedHostnameResolution();
     embedBatch.mockClear();
     embedQuery.mockClear();
     embedBatch.mockImplementation(async (texts: string[]) =>

@@ -131,7 +131,9 @@ describe("sandbox fs bridge shell compatibility", () => {
       }),
     });
 
-    await expect(bridge.readFile({ filePath: "link.txt" })).rejects.toThrow(/Symlink escapes/);
+    await expect(bridge.readFile({ filePath: "link.txt" })).rejects.toThrow(
+      /escapes sandbox root|Symlink escapes/,
+    );
     expect(mockedExecDockerRaw).not.toHaveBeenCalled();
     await fs.rm(stateDir, { recursive: true, force: true });
   });

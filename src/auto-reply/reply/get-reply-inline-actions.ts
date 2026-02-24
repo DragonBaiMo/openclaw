@@ -383,14 +383,19 @@ export async function handleInlineActions(params: {
   insertBoundaryOnly = Boolean(commandResult.insertBoundaryOnly);
   if (!commandResult.shouldContinue) {
     typing.cleanup();
-    return { kind: "reply", reply: commandResult.reply, insertOneShotNext, insertBoundaryOnly };
+    return {
+      kind: "reply",
+      reply: commandResult.reply,
+      ...(insertOneShotNext ? { insertOneShotNext: true } : {}),
+      ...(insertBoundaryOnly ? { insertBoundaryOnly: true } : {}),
+    };
   }
 
   return {
     kind: "continue",
     directives,
     abortedLastRun,
-    insertOneShotNext,
-    insertBoundaryOnly,
+    ...(insertOneShotNext ? { insertOneShotNext: true } : {}),
+    ...(insertBoundaryOnly ? { insertBoundaryOnly: true } : {}),
   };
 }

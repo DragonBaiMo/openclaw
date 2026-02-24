@@ -133,7 +133,7 @@ describe("web_fetch extraction fallbacks", () => {
   const priorFetch = global.fetch;
 
   beforeEach(() => {
-    vi.spyOn(ssrf, "resolvePinnedHostname").mockImplementation(async (hostname) => {
+    const buildPinned = async (hostname: string) => {
       const normalized = hostname.trim().toLowerCase().replace(/\.$/, "");
       const addresses = ["93.184.216.34", "93.184.216.35"];
       return {
@@ -141,7 +141,22 @@ describe("web_fetch extraction fallbacks", () => {
         addresses,
         lookup: ssrf.createPinnedLookup({ hostname: normalized, addresses }),
       };
-    });
+    };
+    vi.spyOn(ssrf, "resolvePinnedHostname").mockImplementation(buildPinned);
+    vi.spyOn(ssrf, "resolvePinnedHostnameWithPolicy").mockImplementation(
+      async (hostname, params) => {
+        const normalized = hostname.trim().toLowerCase().replace(/\.$/, "");
+        const allowPrivateNetwork =
+          params?.policy?.allowPrivateNetwork === true ||
+          params?.policy?.dangerouslyAllowPrivateNetwork === true;
+        if (!allowPrivateNetwork && ssrf.isBlockedHostnameOrIp(normalized, params?.policy)) {
+          throw new ssrf.SsrFBlockedError(
+            "Blocked hostname or private/internal/special-use IP address",
+          );
+        }
+        return await buildPinned(hostname);
+      },
+    );
   });
 
   afterEach(() => {

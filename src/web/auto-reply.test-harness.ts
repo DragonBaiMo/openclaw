@@ -132,18 +132,22 @@ export function installWebAutoReplyUnitTestHooks(opts?: { pinDns?: boolean }) {
     _resetBaileysMocks();
     _resetLoadConfigMock();
     if (opts?.pinDns) {
+      const buildPinned = async (hostname: string) => {
+        // SSRF guard pins DNS; stub resolution to avoid live lookups in unit tests.
+        const normalized = hostname.trim().toLowerCase().replace(/\.$/, "");
+        const addresses = [TEST_NET_IP];
+        return {
+          hostname: normalized,
+          addresses,
+          lookup: ssrf.createPinnedLookup({ hostname: normalized, addresses }),
+        };
+      };
       resolvePinnedHostnameSpy = vi
         .spyOn(ssrf, "resolvePinnedHostname")
-        .mockImplementation(async (hostname) => {
-          // SSRF guard pins DNS; stub resolution to avoid live lookups in unit tests.
-          const normalized = hostname.trim().toLowerCase().replace(/\.$/, "");
-          const addresses = [TEST_NET_IP];
-          return {
-            hostname: normalized,
-            addresses,
-            lookup: ssrf.createPinnedLookup({ hostname: normalized, addresses }),
-          };
-        });
+        .mockImplementation(async (hostname) => await buildPinned(hostname));
+      vi.spyOn(ssrf, "resolvePinnedHostnameWithPolicy").mockImplementation(
+        async (hostname) => await buildPinned(hostname),
+      );
     }
   });
 

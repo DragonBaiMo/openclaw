@@ -2,9 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as ssrf from "../../infra/net/ssrf.js";
 import { type FetchMock, withFetchPreconnect } from "../../test-utils/fetch-mock.js";
 
-const lookupMock = vi.fn();
-const resolvePinnedHostname = ssrf.resolvePinnedHostname;
-
 function makeHeaders(map: Record<string, string>): { get: (key: string) => string | null } {
   return {
     get: (key) => map[key.toLowerCase()] ?? null,
@@ -65,16 +62,30 @@ async function expectBlockedUrl(
 
 describe("web_fetch SSRF protection", () => {
   const priorFetch = global.fetch;
+  const buildPublicLookupResult = () => [{ address: "93.184.216.34", family: 4 }];
+  const lookupMock = vi.fn(async (_hostname?: string) => buildPublicLookupResult());
 
   beforeEach(() => {
-    vi.spyOn(ssrf, "resolvePinnedHostname").mockImplementation((hostname) =>
-      resolvePinnedHostname(hostname, lookupMock),
+    lookupMock.mockReset();
+    lookupMock.mockImplementation(async (_hostname?: string) => buildPublicLookupResult());
+
+    const resolvePinnedHostname = ssrf.resolvePinnedHostname;
+    const resolvePinnedHostnameWithPolicy = ssrf.resolvePinnedHostnameWithPolicy;
+    vi.spyOn(ssrf, "resolvePinnedHostname").mockImplementation(
+      async (hostname) =>
+        await resolvePinnedHostname(hostname, lookupMock as unknown as ssrf.LookupFn),
+    );
+    vi.spyOn(ssrf, "resolvePinnedHostnameWithPolicy").mockImplementation(
+      async (hostname, params) =>
+        await resolvePinnedHostnameWithPolicy(hostname, {
+          ...params,
+          lookupFn: lookupMock as unknown as ssrf.LookupFn,
+        }),
     );
   });
 
   afterEach(() => {
     global.fetch = priorFetch;
-    lookupMock.mockClear();
     vi.restoreAllMocks();
   });
 
@@ -102,12 +113,11 @@ describe("web_fetch SSRF protection", () => {
   });
 
   it("blocks when DNS resolves to private addresses", async () => {
-    lookupMock.mockImplementation(async (hostname: string) => {
-      if (hostname === "public.test") {
-        return [{ address: "93.184.216.34", family: 4 }];
-      }
-      return [{ address: "10.0.0.5", family: 4 }];
-    });
+    lookupMock.mockImplementation(async (hostname?: string) =>
+      hostname === "private.test"
+        ? [{ address: "10.0.0.5", family: 4 }]
+        : [{ address: "93.184.216.34", family: 4 }],
+    );
 
     const fetchSpy = setMockFetch();
     const tool = await createWebFetchToolForTest();
@@ -117,8 +127,6 @@ describe("web_fetch SSRF protection", () => {
   });
 
   it("blocks redirects to private hosts", async () => {
-    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
-
     const fetchSpy = setMockFetch().mockResolvedValueOnce(
       redirectResponse("http://127.0.0.1/secret"),
     );
@@ -131,8 +139,6 @@ describe("web_fetch SSRF protection", () => {
   });
 
   it("allows public hosts", async () => {
-    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
-
     setMockFetch().mockResolvedValue(textResponse("ok"));
     const tool = await createWebFetchToolForTest();
 
