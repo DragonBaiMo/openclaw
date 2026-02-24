@@ -1,5 +1,6 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
+import type { OpenClawConfig } from "../../config/config.js";
 import type { MemoryCitationsMode } from "../../config/types.memory.js";
 import type { ResolvedTimeFormat } from "../date-time.js";
 import type { EmbeddedContextFile } from "../pi-embedded-helpers.js";
@@ -10,6 +11,7 @@ import type { ReasoningLevel, ThinkLevel } from "./utils.js";
 
 export function buildEmbeddedSystemPrompt(params: {
   workspaceDir: string;
+  config?: OpenClawConfig;
   defaultThinkLevel?: ThinkLevel;
   reasoningLevel?: ReasoningLevel;
   extraSystemPrompt?: string;
@@ -53,6 +55,7 @@ export function buildEmbeddedSystemPrompt(params: {
 }): string {
   return buildAgentSystemPrompt({
     workspaceDir: params.workspaceDir,
+    config: params.config,
     defaultThinkLevel: params.defaultThinkLevel,
     reasoningLevel: params.reasoningLevel,
     extraSystemPrompt: params.extraSystemPrompt,

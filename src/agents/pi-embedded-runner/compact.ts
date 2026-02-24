@@ -492,6 +492,7 @@ export async function compactEmbeddedPiSessionDirect(
     const ttsHint = params.config ? buildTtsSystemPromptHint(params.config) : undefined;
     const appendPrompt = buildEmbeddedSystemPrompt({
       workspaceDir: effectiveWorkspace,
+      config: params.config,
       defaultThinkLevel: params.thinkLevel,
       reasoningLevel: params.reasoningLevel ?? "off",
       extraSystemPrompt: params.extraSystemPrompt,
