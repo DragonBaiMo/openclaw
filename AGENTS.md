@@ -25,6 +25,8 @@ Local change rule (required):
   2. what user-facing effect it may cause,
   3. what scenarios might break or become different.
 - Only implement after user confirmation. Avoid unilateral behavior changes.
+- If you make or discover a local-only behavior change / merge keeper, you must update `LOCAL_CHANGELOG.md` in the same work cycle.
+- Keep extending `LOCAL_CHANGELOG.md` using its existing structure/format (MUST KEEP / risks / key files / regression checks). Do not create scattered local notes instead.
 
 ## Project Structure & Module Organization
 
