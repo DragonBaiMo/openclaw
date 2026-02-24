@@ -8,11 +8,16 @@ import { resolveSandboxRuntimeStatus } from "../../agents/sandbox.js";
 import { buildWorkspaceSkillSnapshot } from "../../agents/skills.js";
 import { getSkillsSnapshotVersion } from "../../agents/skills/refresh.js";
 import { buildSystemPromptParams } from "../../agents/system-prompt-params.js";
-import { buildAgentSystemPrompt } from "../../agents/system-prompt.js";
+import {
+  buildAgentSystemPrompt,
+  resolveBoundMessageChannelOptions,
+} from "../../agents/system-prompt.js";
 import { buildToolSummaryMap } from "../../agents/tool-summaries.js";
 import type { WorkspaceBootstrapFile } from "../../agents/workspace.js";
 import { getRemoteSkillEligibility } from "../../infra/skills-remote.js";
+import { getAgentBoundChannels } from "../../routing/bindings.js";
 import { buildTtsSystemPromptHint } from "../../tts/tts.js";
+import { listDeliverableMessageChannels } from "../../utils/message-channel.js";
 import type { HandleCommandsParams } from "./commands-types.js";
 
 export type CommandsSystemPromptBundle = {
@@ -28,7 +33,7 @@ export async function resolveCommandsSystemPromptBundle(
   params: HandleCommandsParams,
 ): Promise<CommandsSystemPromptBundle> {
   const workspaceDir = params.workspaceDir;
-  const { sessionAgentId } = resolveSessionAgentIds({
+  const { sessionAgentId: bootstrapAgentId } = resolveSessionAgentIds({
     sessionKey: params.sessionKey,
     config: params.cfg,
   });
@@ -37,6 +42,11 @@ export async function resolveCommandsSystemPromptBundle(
     config: params.cfg,
     sessionKey: params.sessionKey,
     sessionId: params.sessionEntry?.sessionId,
+    agentId: bootstrapAgentId,
+  });
+  const { sessionAgentId } = resolveSessionAgentIds({
+    sessionKey: params.sessionKey,
+    config: params.cfg,
   });
   const skillsSnapshot = (() => {
     try {
@@ -107,6 +117,10 @@ export async function resolveCommandsSystemPromptBundle(
       }
     : { enabled: false };
   const ttsHint = params.cfg ? buildTtsSystemPromptHint(params.cfg) : undefined;
+  const configuredChannels = (() => {
+    const boundChannels = getAgentBoundChannels(params.cfg, sessionAgentId);
+    return listDeliverableMessageChannels().filter((channel) => boundChannels.has(channel));
+  })();
 
   const systemPrompt = buildAgentSystemPrompt({
     workspaceDir,
@@ -128,6 +142,8 @@ export async function resolveCommandsSystemPromptBundle(
     ttsHint,
     runtimeInfo,
     sandboxInfo,
+    configuredChannels,
+    messageChannelOptions: resolveBoundMessageChannelOptions(params.cfg, sessionAgentId),
     memoryCitationsMode: params.cfg?.memory?.citations,
   });
 

@@ -506,6 +506,45 @@ export function filterBootstrapFilesForSession(
   return files.filter((file) => MINIMAL_BOOTSTRAP_ALLOWLIST.has(file.name));
 }
 
+export async function loadAgentBootstrapOverrides(
+  dir: string,
+  agentId: string,
+): Promise<WorkspaceBootstrapFile[]> {
+  const resolvedDir = resolveUserPath(dir);
+  const agentOverrideDir = path.join(resolvedDir, ".agents", agentId);
+
+  try {
+    await fs.access(agentOverrideDir);
+  } catch {
+    return [];
+  }
+
+  const result: WorkspaceBootstrapFile[] = [];
+  try {
+    const dirEntries = await fs.readdir(agentOverrideDir);
+    for (const entry of dirEntries) {
+      if (!VALID_BOOTSTRAP_NAMES.has(entry) && !entry.endsWith(".md")) {
+        continue;
+      }
+      const filePath = path.join(agentOverrideDir, entry);
+      try {
+        const content = await readFileWithCache(filePath);
+        result.push({
+          name: entry as WorkspaceBootstrapFileName,
+          path: filePath,
+          content,
+          missing: false,
+        });
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    return result;
+  }
+  return result;
+}
+
 export async function loadExtraBootstrapFiles(
   dir: string,
   extraPatterns: string[],

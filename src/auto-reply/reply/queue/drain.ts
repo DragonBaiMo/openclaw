@@ -21,10 +21,22 @@ export function scheduleFollowupDrain(
     return;
   }
   queue.draining = true;
+  let shouldScheduleAgain = true;
   void (async () => {
     try {
       let forceIndividualCollect = false;
-      while (queue.items.length > 0 || queue.droppedCount > 0) {
+      while (queue.items.length > 0 || queue.droppedCount > 0 || Boolean(queue.insertNext)) {
+        if (queue.insertNext) {
+          const queued = queue.insertNext;
+          queue.insertNext = null;
+          await runFollowup(queued);
+          shouldScheduleAgain = false;
+          break;
+        }
+        if (queue.skipNextDrain) {
+          queue.skipNextDrain = false;
+          break;
+        }
         await waitForQueueDebounce(queue);
         if (queue.mode === "collect") {
           // Once the batch is mixed, never collect again within this drain.
@@ -63,7 +75,8 @@ export function scheduleFollowupDrain(
             break;
           }
           if (collectDrainResult === "drained") {
-            continue;
+            shouldScheduleAgain = false;
+            break;
           }
 
           const items = queue.items.slice();
@@ -135,9 +148,9 @@ export function scheduleFollowupDrain(
       defaultRuntime.error?.(`followup queue drain failed for ${key}: ${String(err)}`);
     } finally {
       queue.draining = false;
-      if (queue.items.length === 0 && queue.droppedCount === 0) {
+      if (queue.items.length === 0 && queue.droppedCount === 0 && !queue.insertNext) {
         FOLLOWUP_QUEUES.delete(key);
-      } else {
+      } else if (shouldScheduleAgain) {
         scheduleFollowupDrain(key, runFollowup);
       }
     }

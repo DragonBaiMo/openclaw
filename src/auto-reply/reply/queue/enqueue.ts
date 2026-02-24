@@ -30,6 +30,13 @@ export function enqueueFollowupRun(
   dedupeMode: QueueDedupeMode = "message-id",
 ): boolean {
   const queue = getFollowupQueue(key, settings);
+  if (run.queueKind === "insert") {
+    queue.lastEnqueuedAt = Date.now();
+    queue.lastRun = run.run;
+    queue.insertNext = run;
+    queue.skipNextDrain = false;
+    return true;
+  }
   const dedupe =
     dedupeMode === "none"
       ? undefined

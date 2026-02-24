@@ -177,8 +177,15 @@ function buildChatCommands(): ChatCommandDefinition[] {
       description: "List/add/remove allowlist entries.",
       textAlias: "/allowlist",
       acceptsArgs: true,
-      scope: "text",
       category: "management",
+    }),
+    defineChatCommand({
+      key: "insert",
+      description: "Run one queued follow-up immediately after the current turn.",
+      textAlias: "/insert",
+      acceptsArgs: true,
+      scope: "text",
+      category: "session",
     }),
     defineChatCommand({
       key: "approve",

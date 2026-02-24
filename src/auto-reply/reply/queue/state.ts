@@ -3,6 +3,8 @@ import type { FollowupRun, QueueDropPolicy, QueueMode, QueueSettings } from "./t
 
 export type FollowupQueueState = {
   items: FollowupRun[];
+  insertNext: FollowupRun | null;
+  skipNextDrain: boolean;
   draining: boolean;
   lastEnqueuedAt: number;
   mode: QueueMode;
@@ -32,6 +34,8 @@ export function getFollowupQueue(key: string, settings: QueueSettings): Followup
 
   const created: FollowupQueueState = {
     items: [],
+    insertNext: null,
+    skipNextDrain: false,
     draining: false,
     lastEnqueuedAt: 0,
     mode: settings.mode,
@@ -64,8 +68,10 @@ export function clearFollowupQueue(key: string): number {
   if (!queue) {
     return 0;
   }
-  const cleared = queue.items.length + queue.droppedCount;
+  const cleared = queue.items.length + queue.droppedCount + (queue.insertNext ? 1 : 0);
   queue.items.length = 0;
+  queue.insertNext = null;
+  queue.skipNextDrain = false;
   queue.droppedCount = 0;
   queue.summaryLines = [];
   queue.lastRun = undefined;

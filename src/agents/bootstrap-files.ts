@@ -8,6 +8,7 @@ import {
 } from "./pi-embedded-helpers.js";
 import {
   filterBootstrapFilesForSession,
+  loadAgentBootstrapOverrides,
   loadWorkspaceBootstrapFiles,
   type WorkspaceBootstrapFile,
 } from "./workspace.js";
@@ -30,13 +31,24 @@ export async function resolveBootstrapFilesForRun(params: {
   agentId?: string;
 }): Promise<WorkspaceBootstrapFile[]> {
   const sessionKey = params.sessionKey ?? params.sessionId;
-  const bootstrapFiles = filterBootstrapFilesForSession(
-    await loadWorkspaceBootstrapFiles(params.workspaceDir),
-    sessionKey,
-  );
+  let bootstrapFiles = await loadWorkspaceBootstrapFiles(params.workspaceDir);
+
+  if (params.agentId) {
+    const overrides = await loadAgentBootstrapOverrides(params.workspaceDir, params.agentId);
+    if (overrides.length > 0) {
+      const overrideMap = new Map(overrides.map((f) => [f.name, f]));
+      bootstrapFiles = bootstrapFiles.map((f) => overrideMap.get(f.name) ?? f);
+      const baseNames = new Set(bootstrapFiles.map((f) => f.name));
+      for (const override of overrides) {
+        if (!baseNames.has(override.name)) {
+          bootstrapFiles.push(override);
+        }
+      }
+    }
+  }
 
   return applyBootstrapHookOverrides({
-    files: bootstrapFiles,
+    files: filterBootstrapFilesForSession(bootstrapFiles, sessionKey),
     workspaceDir: params.workspaceDir,
     config: params.config,
     sessionKey: params.sessionKey,

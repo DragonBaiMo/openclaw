@@ -24,6 +24,7 @@ export type FollowupRun = {
   messageId?: string;
   summaryLine?: string;
   enqueuedAt: number;
+  queueKind?: "normal" | "insert";
   /**
    * Originating channel for reply routing.
    * When set, replies should be routed back to this provider

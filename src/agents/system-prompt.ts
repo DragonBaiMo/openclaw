@@ -127,7 +127,7 @@ function buildReplyTagsSection(isMinimal: boolean) {
 function buildMessagingSection(params: {
   isMinimal: boolean;
   availableTools: Set<string>;
-  messageChannelOptions: string;
+  messageChannelOptions?: string;
   inlineButtonsEnabled: boolean;
   runtimeChannel?: string;
   messageToolHints?: string[];
@@ -196,6 +196,22 @@ function buildDocsSection(params: { docsPath?: string; isMinimal: boolean; readT
   ];
 }
 
+export function resolveBoundMessageChannelOptions(
+  cfg: OpenClawConfig | undefined,
+  agentId: string | undefined,
+): string {
+  if (!cfg) {
+    return "";
+  }
+  const boundChannels = getAgentBoundChannels(cfg, agentId);
+  if (boundChannels.size === 0) {
+    return "";
+  }
+  return listDeliverableMessageChannels()
+    .filter((channel) => boundChannels.has(String(channel)))
+    .join("|");
+}
+
 export function buildAgentSystemPrompt(params: {
   workspaceDir: string;
   config?: OpenClawConfig;
@@ -253,6 +269,8 @@ export function buildAgentSystemPrompt(params: {
     level: "minimal" | "extensive";
     channel: string;
   };
+  configuredChannels?: string[];
+  messageChannelOptions?: string;
   memoryCitationsMode?: MemoryCitationsMode;
 }) {
   const coreToolSummaries: Record<string, string> = {
@@ -388,7 +406,8 @@ export function buildAgentSystemPrompt(params: {
   const runtimeCapabilitiesLower = new Set(runtimeCapabilities.map((cap) => cap.toLowerCase()));
   const inlineButtonsEnabled = runtimeCapabilitiesLower.has("inlinebuttons");
   const allMessageChannels = listDeliverableMessageChannels();
-  const messageChannelOptions = (() => {
+  const configuredChannels = params.configuredChannels;
+  const fallbackMessageChannelOptions = (() => {
     const agentId = runtimeInfo?.agentId;
     if (!params.config || !agentId) {
       return allMessageChannels.join("|");
@@ -399,6 +418,12 @@ export function buildAgentSystemPrompt(params: {
     }
     return allMessageChannels.filter((channel) => boundChannels.has(channel)).join("|");
   })();
+  const messageChannelOptions =
+    typeof params.messageChannelOptions === "string"
+      ? params.messageChannelOptions.trim()
+      : configuredChannels === undefined
+        ? fallbackMessageChannelOptions
+        : configuredChannels.join("|");
   const promptMode = params.promptMode ?? "full";
   const isMinimal = promptMode === "minimal" || promptMode === "none";
   const sandboxContainerWorkspace = params.sandboxInfo?.containerWorkspaceDir?.trim();
