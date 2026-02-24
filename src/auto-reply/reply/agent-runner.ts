@@ -243,6 +243,7 @@ export async function runReplyAgent(params: {
     }
   }
 
+  let isActiveAfterInsertHandling = isActive;
   if (insertBoundaryOnly) {
     const sessionId = followupRun.run.sessionId;
 
@@ -278,10 +279,22 @@ export async function runReplyAgent(params: {
       }
     }
 
-    // 继续往下走，直接执行一轮新的 run（不走 followup queue）。
+    isActiveAfterInsertHandling = isEmbeddedPiRunActive(sessionId);
+
+    // /insert 不应该退化为 followup 排队；若当前 run 仍在进行，直接返回提示，避免“排到下一轮”。
+    if (isActiveAfterInsertHandling) {
+      typing.cleanup();
+      return {
+        text: "⚠️ /insert preemption timed out while run is still active. Please retry /insert.",
+      };
+    }
   }
 
-  if (isActive && (shouldFollowup || resolvedQueue.mode === "steer")) {
+  if (
+    !insertBoundaryOnly &&
+    isActiveAfterInsertHandling &&
+    (shouldFollowup || resolvedQueue.mode === "steer")
+  ) {
     enqueueFollowupRun(queueKey, followupRun, resolvedQueue);
     await touchActiveSessionEntry();
     typing.cleanup();

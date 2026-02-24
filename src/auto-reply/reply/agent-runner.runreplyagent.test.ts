@@ -9,6 +9,7 @@ import { withStateDirEnv } from "../../test-helpers/state-dir-env.js";
 import type { TemplateContext } from "../templating.js";
 import type { GetReplyOptions } from "../types.js";
 import type { FollowupRun, QueueSettings } from "./queue.js";
+import { enqueueFollowupRun } from "./queue.js";
 import { createMockTypingController } from "./test-helpers.js";
 
 type AgentRunParams = {
@@ -29,6 +30,11 @@ type EmbeddedRunParams = {
 const state = vi.hoisted(() => ({
   runEmbeddedPiAgentMock: vi.fn(),
   runCliAgentMock: vi.fn(),
+  queueEmbeddedPiMessageMock: vi.fn().mockReturnValue(false),
+  isEmbeddedPiRunActiveMock: vi.fn().mockReturnValue(false),
+  isEmbeddedPiRunStreamingMock: vi.fn().mockReturnValue(false),
+  abortEmbeddedPiRunMock: vi.fn().mockReturnValue(false),
+  waitForEmbeddedPiRunEndMock: vi.fn().mockResolvedValue(true),
 }));
 
 let modelFallbackModule: typeof import("../../agents/model-fallback.js");
@@ -63,7 +69,11 @@ vi.mock("../../agents/model-fallback.js", () => ({
 }));
 
 vi.mock("../../agents/pi-embedded.js", () => ({
-  queueEmbeddedPiMessage: vi.fn().mockReturnValue(false),
+  queueEmbeddedPiMessage: (...args: unknown[]) => state.queueEmbeddedPiMessageMock(...args),
+  isEmbeddedPiRunActive: (...args: unknown[]) => state.isEmbeddedPiRunActiveMock(...args),
+  isEmbeddedPiRunStreaming: (...args: unknown[]) => state.isEmbeddedPiRunStreamingMock(...args),
+  abortEmbeddedPiRun: (...args: unknown[]) => state.abortEmbeddedPiRunMock(...args),
+  waitForEmbeddedPiRunEnd: (...args: unknown[]) => state.waitForEmbeddedPiRunEndMock(...args),
   runEmbeddedPiAgent: (params: unknown) => state.runEmbeddedPiAgentMock(params),
 }));
 
@@ -86,6 +96,16 @@ beforeAll(async () => {
 beforeEach(() => {
   state.runEmbeddedPiAgentMock.mockClear();
   state.runCliAgentMock.mockClear();
+  state.queueEmbeddedPiMessageMock.mockReset();
+  state.queueEmbeddedPiMessageMock.mockReturnValue(false);
+  state.isEmbeddedPiRunActiveMock.mockReset();
+  state.isEmbeddedPiRunActiveMock.mockReturnValue(false);
+  state.isEmbeddedPiRunStreamingMock.mockReset();
+  state.isEmbeddedPiRunStreamingMock.mockReturnValue(false);
+  state.abortEmbeddedPiRunMock.mockReset();
+  state.abortEmbeddedPiRunMock.mockReturnValue(false);
+  state.waitForEmbeddedPiRunEndMock.mockReset();
+  state.waitForEmbeddedPiRunEndMock.mockResolvedValue(true);
   vi.stubEnv("OPENCLAW_TEST_FAST", "1");
 });
 
@@ -1578,5 +1598,67 @@ describe("runReplyAgent memory flush", () => {
       expect(stored[sessionKey].compactionCount).toBe(2);
       expect(stored[sessionKey].memoryFlushCompactionCount).toBe(2);
     });
+  });
+
+  it("/insert does not fall back to followup queue when preemption times out and run stays active", async () => {
+    const typing = createMockTypingController();
+    const followupRun = {
+      prompt: "insert me",
+      summaryLine: "insert me",
+      enqueuedAt: Date.now(),
+      run: {
+        sessionId: "session-insert",
+        sessionKey: "main",
+        messageProvider: "telegram",
+        sessionFile: "/tmp/session.jsonl",
+        workspaceDir: "/tmp",
+        config: {},
+        skillsSnapshot: {},
+        provider: "anthropic",
+        model: "claude",
+        thinkLevel: "low",
+        verboseLevel: "off",
+        elevatedLevel: "off",
+        bashElevated: {
+          enabled: false,
+          allowed: false,
+          defaultLevel: "off",
+        },
+        timeoutMs: 1_000,
+        blockReplyBreak: "message_end",
+      },
+    } as unknown as FollowupRun;
+
+    state.isEmbeddedPiRunActiveMock.mockReturnValue(true);
+    state.isEmbeddedPiRunStreamingMock.mockReturnValue(false);
+    state.abortEmbeddedPiRunMock.mockReturnValue(false);
+
+    const runReplyAgent = await getRunReplyAgent();
+    const out = await runReplyAgent({
+      commandBody: "insert me",
+      followupRun,
+      queueKey: "main",
+      resolvedQueue: { mode: "steer" } as unknown as QueueSettings,
+      shouldSteer: true,
+      shouldFollowup: false,
+      isActive: true,
+      isStreaming: false,
+      typing,
+      sessionCtx: { Provider: "telegram", MessageSid: "m1" } as unknown as TemplateContext,
+      defaultModel: "anthropic/claude-opus-4-5",
+      resolvedVerboseLevel: "off",
+      isNewSession: false,
+      blockStreamingEnabled: false,
+      resolvedBlockStreamingBreak: "message_end",
+      shouldInjectGroupIntro: false,
+      typingMode: "instant",
+      insertBoundaryOnly: true,
+    });
+
+    expect(out).toEqual({
+      text: "⚠️ /insert preemption timed out while run is still active. Please retry /insert.",
+    });
+    expect(enqueueFollowupRun).not.toHaveBeenCalled();
+    expect(state.runEmbeddedPiAgentMock).not.toHaveBeenCalled();
   });
 });
