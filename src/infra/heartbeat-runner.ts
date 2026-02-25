@@ -138,7 +138,19 @@ export function isHeartbeatEnabledForAgent(cfg: OpenClawConfig, agentId?: string
       (entry) => Boolean(entry?.heartbeat) && normalizeAgentId(entry?.id) === resolvedAgentId,
     );
   }
-  return resolvedAgentId === resolveDefaultAgentId(cfg);
+
+  const defaultsEvery = cfg.agents?.defaults?.heartbeat?.every;
+  const hasGlobalHeartbeatDefault =
+    typeof defaultsEvery === "string" && defaultsEvery.trim().length > 0;
+  if (!hasGlobalHeartbeatDefault) {
+    return false;
+  }
+
+  if (list.length === 0) {
+    return resolvedAgentId === resolveDefaultAgentId(cfg);
+  }
+
+  return list.some((entry) => normalizeAgentId(entry?.id) === resolvedAgentId);
 }
 
 function resolveHeartbeatConfig(
@@ -215,8 +227,25 @@ function resolveHeartbeatAgents(cfg: OpenClawConfig): HeartbeatAgent[] {
       })
       .filter((entry) => entry.agentId);
   }
-  const fallbackId = resolveDefaultAgentId(cfg);
-  return [{ agentId: fallbackId, heartbeat: resolveHeartbeatConfig(cfg, fallbackId) }];
+
+  const defaultsEvery = cfg.agents?.defaults?.heartbeat?.every;
+  const hasGlobalHeartbeatDefault =
+    typeof defaultsEvery === "string" && defaultsEvery.trim().length > 0;
+  if (!hasGlobalHeartbeatDefault) {
+    return [];
+  }
+
+  if (list.length === 0) {
+    const fallbackId = resolveDefaultAgentId(cfg);
+    return [{ agentId: fallbackId, heartbeat: resolveHeartbeatConfig(cfg, fallbackId) }];
+  }
+
+  return list
+    .map((entry) => {
+      const id = normalizeAgentId(entry.id);
+      return { agentId: id, heartbeat: resolveHeartbeatConfig(cfg, id) };
+    })
+    .filter((entry) => entry.agentId);
 }
 
 export function resolveHeartbeatIntervalMs(
@@ -250,6 +279,35 @@ export function resolveHeartbeatIntervalMs(
 
 export function resolveHeartbeatPrompt(cfg: OpenClawConfig, heartbeat?: HeartbeatConfig) {
   return resolveHeartbeatPromptText(heartbeat?.prompt ?? cfg.agents?.defaults?.heartbeat?.prompt);
+}
+
+async function resolveHeartbeatPromptWithFileContent(params: {
+  cfg: OpenClawConfig;
+  agentId: string;
+  heartbeat?: HeartbeatConfig;
+}): Promise<{ prompt: string | null; source: "missing" | "empty" | "actionable" | "read-error" }> {
+  const basePrompt = resolveHeartbeatPrompt(params.cfg, params.heartbeat);
+  const workspaceDir = resolveAgentWorkspaceDir(params.cfg, params.agentId);
+  const heartbeatFilePath = path.join(workspaceDir, DEFAULT_HEARTBEAT_FILENAME);
+  try {
+    const heartbeatFileContent = await fs.readFile(heartbeatFilePath, "utf-8");
+    if (isHeartbeatContentEffectivelyEmpty(heartbeatFileContent)) {
+      return { prompt: null, source: "empty" };
+    }
+    const trimmed = heartbeatFileContent.trim();
+    if (!trimmed) {
+      return { prompt: null, source: "empty" };
+    }
+    return {
+      prompt: `${basePrompt}\n\n[HEARTBEAT_MD_CONTENT_BEGIN]\n${trimmed}\n[HEARTBEAT_MD_CONTENT_END]`,
+      source: "actionable",
+    };
+  } catch (err: unknown) {
+    if (hasErrnoCode(err, "ENOENT")) {
+      return { prompt: null, source: "missing" };
+    }
+    return { prompt: null, source: "read-error" };
+  }
 }
 
 function resolveHeartbeatAckMaxChars(cfg: OpenClawConfig, heartbeat?: HeartbeatConfig) {
@@ -697,13 +755,38 @@ export async function runHeartbeatOnce(opts: {
   const hasCronEvents = cronEvents.length > 0;
   const hasWakeEvents =
     !hasExecCompletion && !hasCronEvents && reasonKind === "hook" && pendingEvents.length > 0;
+  const defaultPromptPayload = await resolveHeartbeatPromptWithFileContent({
+    cfg,
+    agentId,
+    heartbeat,
+  });
+  const defaultPrompt = defaultPromptPayload.prompt;
+
+  if (
+    !hasExecCompletion &&
+    !hasCronEvents &&
+    !hasWakeEvents &&
+    reasonKind !== "wake" &&
+    reasonKind !== "hook" &&
+    !defaultPrompt &&
+    defaultPromptPayload.source !== "read-error"
+  ) {
+    emitHeartbeatEvent({
+      agentId,
+      status: "skipped",
+      reason: "empty-heartbeat-file",
+      durationMs: Date.now() - startedAt,
+    });
+    return { status: "skipped", reason: "empty-heartbeat-file" };
+  }
+
   const prompt = hasExecCompletion
     ? EXEC_EVENT_PROMPT
     : hasCronEvents
       ? buildCronEventPrompt(cronEvents)
       : hasWakeEvents
         ? WAKE_EVENT_PROMPT
-        : resolveHeartbeatPrompt(cfg, heartbeat);
+        : (defaultPrompt ?? resolveHeartbeatPrompt(cfg, heartbeat));
   const ctx = {
     Body: appendCronStyleCurrentTimeLine(prompt, cfg, startedAt),
     From: sender,

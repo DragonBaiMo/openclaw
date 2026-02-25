@@ -198,7 +198,7 @@ describe("isHeartbeatEnabledForAgent", () => {
     expect(isHeartbeatEnabledForAgent(cfg, "ops")).toBe(true);
   });
 
-  it("falls back to default agent when no explicit heartbeat entries", () => {
+  it("enables all agents when global heartbeat default is configured and no per-agent overrides exist", () => {
     const cfg: OpenClawConfig = {
       agents: {
         defaults: { heartbeat: { every: "30m" } },
@@ -206,6 +206,17 @@ describe("isHeartbeatEnabledForAgent", () => {
       },
     };
     expect(isHeartbeatEnabledForAgent(cfg, "main")).toBe(true);
+    expect(isHeartbeatEnabledForAgent(cfg, "ops")).toBe(true);
+  });
+
+  it("disables heartbeat for all agents when no global default and no per-agent overrides", () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        defaults: {},
+        list: [{ id: "main" }, { id: "ops" }],
+      },
+    };
+    expect(isHeartbeatEnabledForAgent(cfg, "main")).toBe(false);
     expect(isHeartbeatEnabledForAgent(cfg, "ops")).toBe(false);
   });
 });
@@ -596,6 +607,78 @@ describe("runHeartbeatOnce", () => {
         expect.objectContaining({ isHeartbeat: true, suppressToolErrorWarnings: false }),
         cfg,
       );
+    } finally {
+      replySpy.mockRestore();
+    }
+  });
+
+  it("inlines HEARTBEAT.md content into heartbeat prompt sent to AI", async () => {
+    const tmpDir = await createCaseDir("hb-inline-heartbeat-file-content");
+    const storePath = path.join(tmpDir, "sessions.json");
+    const replySpy = vi.spyOn(replyModule, "getReplyFromConfig");
+    try {
+      const cfg: OpenClawConfig = {
+        agents: {
+          defaults: {
+            workspace: tmpDir,
+            heartbeat: { every: "5m", target: "last", prompt: "Follow HEARTBEAT directives" },
+          },
+        },
+        channels: { whatsapp: { allowFrom: ["*"] } },
+        session: { store: storePath },
+      };
+      const mainSessionKey = resolveMainSessionKey(cfg);
+      await fs.writeFile(
+        storePath,
+        JSON.stringify({
+          [mainSessionKey]: {
+            sessionId: "sid-main",
+            updatedAt: Date.now(),
+            lastChannel: "whatsapp",
+            lastTo: "+1555",
+          },
+        }),
+      );
+      await fs.writeFile(
+        path.join(tmpDir, "HEARTBEAT.md"),
+        "# HEARTBEAT.md\n\n- Check incident channel\n- Summarize open alerts\n",
+        "utf-8",
+      );
+
+      replySpy.mockResolvedValue([{ text: "Heartbeat alert" }]);
+      const sendWhatsApp = vi.fn<NonNullable<HeartbeatDeps["sendWhatsApp"]>>().mockResolvedValue({
+        messageId: "m1",
+        toJid: "jid",
+      });
+
+      await runHeartbeatOnce({
+        cfg,
+        deps: createHeartbeatDeps(sendWhatsApp),
+      });
+
+      expect(replySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Body: expect.stringContaining("[HEARTBEAT_MD_CONTENT_BEGIN]"),
+        }),
+        expect.objectContaining({ isHeartbeat: true, suppressToolErrorWarnings: false }),
+        cfg,
+      );
+      expect(replySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Body: expect.stringContaining("- Check incident channel"),
+        }),
+        expect.any(Object),
+        cfg,
+      );
+      expect(replySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Body: expect.stringContaining("[HEARTBEAT_MD_CONTENT_END]"),
+        }),
+        expect.any(Object),
+        cfg,
+      );
+      expect(sendWhatsApp).toHaveBeenCalledTimes(1);
+      expect(sendWhatsApp).toHaveBeenCalledWith("+1555", "Heartbeat alert", expect.any(Object));
     } finally {
       replySpy.mockRestore();
     }
