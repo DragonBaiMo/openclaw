@@ -237,4 +237,93 @@ describe("startHeartbeatRunner", () => {
 
     runner.stop();
   });
+
+  it("does not double-fire when interval tick and wake request happen in same cycle", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(0));
+
+    const runSpy = vi.fn().mockResolvedValue({ status: "ran", durationMs: 1 });
+    const runner = startHeartbeatRunner({
+      cfg: {
+        agents: {
+          defaults: { heartbeat: { every: "1m" } },
+        },
+      } as OpenClawConfig,
+      runOnce: runSpy,
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    requestHeartbeatNow({ reason: "manual", coalesceMs: 0 });
+    await vi.advanceTimersByTimeAsync(2);
+
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(runSpy).toHaveBeenCalledWith(expect.objectContaining({ agentId: "main" }));
+
+    runner.stop();
+  });
+
+  it("routes same-cycle interval+wake through a single run when channel is busy", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(0));
+
+    const runSpy = vi
+      .fn()
+      .mockResolvedValueOnce({ status: "skipped", reason: "requests-in-flight" })
+      .mockResolvedValue({ status: "ran", durationMs: 1 });
+
+    const runner = startHeartbeatRunner({
+      cfg: {
+        agents: {
+          defaults: { heartbeat: { every: "1m" } },
+        },
+      } as OpenClawConfig,
+      runOnce: runSpy,
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    requestHeartbeatNow({ reason: "manual", coalesceMs: 0 });
+    await vi.advanceTimersByTimeAsync(2);
+
+    expect(runSpy).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1_000 + 2);
+    expect(runSpy).toHaveBeenCalledTimes(2);
+
+    runner.stop();
+  });
+
+  it("does not run twice when targeted wake and interval are queued together", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(0));
+
+    const runSpy = vi.fn().mockResolvedValue({ status: "ran", durationMs: 1 });
+    const runner = startHeartbeatRunner({
+      cfg: {
+        agents: {
+          defaults: { heartbeat: { every: "1m" } },
+        },
+      } as OpenClawConfig,
+      runOnce: runSpy,
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    requestHeartbeatNow({
+      reason: "hook:wake",
+      agentId: "main",
+      sessionKey: "agent:main:discord:thread:alerts",
+      coalesceMs: 0,
+    });
+    await vi.advanceTimersByTimeAsync(2);
+
+    expect(runSpy).toHaveBeenCalledTimes(1);
+    expect(runSpy.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        reason: "hook:wake",
+        agentId: "main",
+        sessionKey: "agent:main:discord:thread:alerts",
+      }),
+    );
+
+    runner.stop();
+  });
 });

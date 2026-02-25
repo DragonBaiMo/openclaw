@@ -462,7 +462,7 @@ describe("agents.files.list", () => {
   it("prefers .agents/<agentId>/ overrides and reports shared/override metadata", async () => {
     mocks.loadConfigReturn = {};
 
-    mocks.fsStat.mockImplementation(async (pathLike: unknown) => {
+    mocks.fsStat.mockImplementation(async (pathLike?: unknown) => {
       const filePath = typeof pathLike === "string" ? pathLike : "";
       if (filePath.includes("/.agents/main/HEARTBEAT.md")) {
         return {

@@ -142,11 +142,29 @@ function schedule(coalesceMs: number, kind: WakeTimerKind = "normal") {
       return;
     }
 
-    const pendingBatch = Array.from(pendingWakes.values());
+    const pendingBatch = Array.from(pendingWakes.values()).toSorted((a, b) => {
+      if (b.priority !== a.priority) {
+        return b.priority - a.priority;
+      }
+      return a.requestedAt - b.requestedAt;
+    });
     pendingWakes.clear();
+
+    const hasTargetedWakeInBatch = pendingBatch.some((wake) =>
+      Boolean(wake.agentId || wake.sessionKey),
+    );
+    const effectiveBatch = hasTargetedWakeInBatch
+      ? pendingBatch.filter(
+          (wake) =>
+            wake.agentId ||
+            wake.sessionKey ||
+            resolveHeartbeatReasonKind(wake.reason) !== "interval",
+        )
+      : pendingBatch;
+
     running = true;
     try {
-      for (const pendingWake of pendingBatch) {
+      for (const pendingWake of effectiveBatch) {
         const wakeOpts = {
           reason: pendingWake.reason ?? undefined,
           ...(pendingWake.agentId ? { agentId: pendingWake.agentId } : {}),
@@ -165,7 +183,7 @@ function schedule(coalesceMs: number, kind: WakeTimerKind = "normal") {
       }
     } catch {
       // Error is already logged by the heartbeat runner; schedule a retry.
-      for (const pendingWake of pendingBatch) {
+      for (const pendingWake of effectiveBatch) {
         queuePendingWakeReason({
           reason: pendingWake.reason ?? "retry",
           agentId: pendingWake.agentId,

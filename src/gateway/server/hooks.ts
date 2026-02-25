@@ -1,12 +1,17 @@
 import { randomUUID } from "node:crypto";
 import type { CliDeps } from "../../cli/deps.js";
 import { loadConfig } from "../../config/config.js";
-import { resolveMainSessionKeyFromConfig } from "../../config/sessions.js";
+import {
+  resolveAgentMainSessionKey,
+  resolveMainSessionKey,
+  resolveMainSessionKeyFromConfig,
+} from "../../config/sessions.js";
 import { runCronIsolatedAgentTurn } from "../../cron/isolated-agent.js";
 import type { CronJob } from "../../cron/types.js";
 import { requestHeartbeatNow } from "../../infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../infra/system-events.js";
 import type { createSubsystemLogger } from "../../logging/subsystem.js";
+import { normalizeAgentId } from "../../routing/session-key.js";
 import type { HookAgentDispatchPayload, HooksConfigResolved } from "../hooks.js";
 import { createHooksRequestHandler } from "../server-http.js";
 
@@ -21,12 +26,28 @@ export function createGatewayHooksRequestHandler(params: {
 }) {
   const { deps, getHooksConfig, bindHost, port, logHooks } = params;
 
+  const resolveWakeTargetSessionKey = (requestedSessionKey?: string) => {
+    const trimmed = requestedSessionKey?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+
+    const cfg = loadConfig();
+    const heartbeatAgents = cfg.agents?.list?.filter((entry) => Boolean(entry?.heartbeat)) ?? [];
+    if (heartbeatAgents.length === 1) {
+      const onlyHeartbeatAgentId = normalizeAgentId(heartbeatAgents[0]?.id);
+      return resolveAgentMainSessionKey({ cfg, agentId: onlyHeartbeatAgentId });
+    }
+
+    return resolveMainSessionKey(cfg);
+  };
+
   const dispatchWakeHook = (value: {
     text: string;
     mode: "now" | "next-heartbeat";
     sessionKey?: string;
   }) => {
-    const sessionKey = value.sessionKey?.trim() || resolveMainSessionKeyFromConfig();
+    const sessionKey = resolveWakeTargetSessionKey(value.sessionKey);
     enqueueSystemEvent(value.text, { sessionKey });
     if (value.mode === "now") {
       requestHeartbeatNow({ reason: "hook:wake", sessionKey });

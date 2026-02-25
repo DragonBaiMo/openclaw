@@ -189,6 +189,34 @@ describe("gateway server hooks", () => {
       ).toBe(false);
       drainSystemEvents(targetedSessionKey);
 
+      const singleHeartbeatAgentSession = "agent:hooks:main";
+      testState.agentsConfig = {
+        list: [
+          { id: "main", default: true },
+          { id: "hooks", heartbeat: { every: "5m" } },
+        ],
+      };
+      const resFallbackWake = await fetch(`http://127.0.0.1:${port}/hooks/wake`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer hook-secret",
+        },
+        body: JSON.stringify({ text: "Fallback to sole heartbeat agent", mode: "next-heartbeat" }),
+      });
+      expect(resFallbackWake.status).toBe(200);
+      const fallbackEvents = await waitForSystemEventInSession(singleHeartbeatAgentSession);
+      expect(fallbackEvents.some((e) => e.includes("Fallback to sole heartbeat agent"))).toBe(true);
+      expect(
+        peekSystemEvents(resolveMainKey()).some((e) =>
+          e.includes("Fallback to sole heartbeat agent"),
+        ),
+      ).toBe(false);
+      drainSystemEvents(singleHeartbeatAgentSession);
+      testState.agentsConfig = {
+        list: [{ id: "main", default: true }, { id: "hooks" }],
+      };
+
       const resGet = await fetch(`http://127.0.0.1:${port}/hooks/wake`, {
         method: "GET",
         headers: { Authorization: "Bearer hook-secret" },
